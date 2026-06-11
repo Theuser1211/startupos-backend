@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum JobType {
+  BLUEPRINT_GENERATION
+  WEBSITE_GENERATION
+  DEPLOYMENT
+}
+
+enum DeploymentStatus {
+  PENDING
+  BUILDING
+  DEPLOYING
+  LIVE
+  FAILED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  startups Startup[]
+}
+
+model Startup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  logo        String?
+  industry    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  blueprint Blueprint?
+  websites  Website[]
+  jobs      Job[]
+
+  @@index([userId])
+}
+
+model Blueprint {
+  id          String   @id @default(uuid())
+  content     Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  startupId String  @unique
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+}
+
+model WebsiteSpec {
+  id        String   @id @default(uuid())
+  content   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  websiteId String  @unique
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+model Website {
+  id            String   @id @default(uuid())
+  name          String
+  content       Json
+  status        String   @default("draft")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  startupId String
+  startup   Startup    @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  spec  WebsiteSpec?
+  deployment Deployment?
+}
+
+model Deployment {
+  id        String           @id @default(uuid())
+  status    DeploymentStatus @default(PENDING)
+  url       String?
+  error     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  websiteId String  @unique
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+model Job {
+  id        String    @id @default(uuid())
+  type      JobType
+  status    JobStatus @default(PENDING)
+  payload   Json?
+  result    Json?
+  error     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  startupId String
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+  @@index([status])
+}
+
+model ApiLog {
+  id         String   @id @default(uuid())
+  method     String
+  path       String
+  statusCode Int
+  userId     String?
+  ip         String?
+  duration   Int
+  createdAt  DateTime @default(now())
+}
