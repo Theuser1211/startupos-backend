@@ -1,12 +1,26 @@
 import { Queue, Worker, QueueEvents } from "bullmq";
+import Redis from "ioredis";
 import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
 
 const QUEUE_NAME = "startupos-generations";
-const connection = {
-  host: env.REDIS_HOST,
-  port: env.REDIS_PORT,
-};
+
+function createRedisConnection() {
+  if (env.REDIS_URL) {
+    const useTLS = env.REDIS_URL.startsWith("rediss://");
+    return new Redis(env.REDIS_URL, {
+      maxRetriesPerRequest: null,
+      ...(useTLS ? { tls: {} } : {}),
+    });
+  }
+  return new Redis({
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
+    maxRetriesPerRequest: null,
+  });
+}
+
+const connection = createRedisConnection();
 
 let queue: Queue | null = null;
 let queueEvents: QueueEvents | null = null;
