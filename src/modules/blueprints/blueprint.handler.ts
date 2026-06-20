@@ -13,13 +13,11 @@ export async function generateBlueprintHandler(
   const { startupId, prompt } = request.body;
   const userId = request.user!.userId;
 
-  logger.info({ requestId, startupId, userId, prompt: prompt?.substring(0, 50) }, "[BP1] request received");
-
   try {
     logger.info({ requestId }, "[BP2] startup lookup start");
     const startup = await prisma.startup.findUnique({
       where: { id: startupId },
-      select: { userId: true },
+      select: { userId: true, description: true },
     });
     logger.info({ requestId, found: !!startup }, "[BP2] startup lookup done");
 
@@ -28,6 +26,13 @@ export async function generateBlueprintHandler(
       throw new NotFoundError("Startup");
     }
 
+    const effectivePrompt = prompt ?? startup.description ?? "";
+    if (!effectivePrompt || effectivePrompt.length < 10) {
+      logger.warn({ requestId, startupId }, "[BP3] prompt missing or too short");
+      throw new Error("Prompt is required (provide in request or set startup description)");
+    }
+
+    logger.info({ requestId, startupId, userId, prompt: effectivePrompt?.substring(0, 50) }, "[BP1] request received");
     logger.info({ requestId, ownerMatch: startup.userId === userId }, "[BP3] ownership check");
     if (startup.userId !== userId) {
       logger.warn({ requestId, startupId, userId }, "[BP3] forbidden");
@@ -75,7 +80,7 @@ export async function generateBlueprintHandler(
       data: {
         type: "BLUEPRINT_GENERATION",
         status: "PENDING",
-        payload: { startupId, prompt },
+        payload: { startupId, prompt: effectivePrompt },
         startupId,
       },
     });
@@ -90,7 +95,7 @@ export async function generateBlueprintHandler(
         startupId,
         userId,
         type: "BLUEPRINT_GENERATION",
-        payload: { prompt },
+        payload: { prompt: effectivePrompt },
       });
     } catch (queueError: unknown) {
       const qe = queueError as Error;

@@ -12,7 +12,7 @@ export async function blueprintRoutes(app: FastifyInstance): Promise<void> {
       security: [{ bearerAuth: [] }],
       body: {
         type: "object",
-        required: ["startupId", "prompt"],
+        required: ["startupId"],
         properties: {
           startupId: { type: "string", format: "uuid" },
           prompt: { type: "string", minLength: 10 },
