@@ -106,6 +106,7 @@ export abstract class BaseAIProvider implements AIProvider {
     logger.info({ parsedKeys: Object.keys(parsed) }, "Parsed blueprint object");
     const normalized = normalizeBlueprint(parsed);
     const validated = BlueprintResultSchema.parse(normalized);
+    console.log("[BP-DATA] validated blueprint", JSON.stringify(validated, null, 2));
     logger.info({ validatedKeys: Object.keys(validated), validatedName: validated.name }, "Validated blueprint");
     return validated;
   }
@@ -229,7 +230,10 @@ Return ONLY valid JSON with this exact structure:
     );
 
     logger.info({ provider: this.name, rawLength: raw.length, rawPreview: raw.substring(0, 200) }, "Raw response from FreeLLM");
-    return this.validateBlueprint(raw) as unknown as BlueprintResult;
+    const validated = this.validateBlueprint(raw) as unknown as BlueprintResult;
+    console.log("[BP-DATA] FreeLLM validated keys", Object.keys(validated));
+    console.log("[BP-DATA] FreeLLM validated", JSON.stringify(validated, null, 2));
+    return validated;
   }
 
   async generateWebsiteSpec(blueprint: BlueprintResult): Promise<WebsiteSpecResult> {
@@ -325,7 +329,10 @@ Return ONLY valid JSON with this exact structure:
     );
 
     logger.info({ provider: this.name, rawLength: raw.length, rawPreview: raw.substring(0, 200) }, "Raw response from Groq");
-    return this.validateBlueprint(raw) as unknown as BlueprintResult;
+    const validated = this.validateBlueprint(raw) as unknown as BlueprintResult;
+    console.log("[BP-DATA] Groq validated keys", Object.keys(validated));
+    console.log("[BP-DATA] Groq validated", JSON.stringify(validated, null, 2));
+    return validated;
   }
 
   async generateWebsiteSpec(blueprint: BlueprintResult): Promise<WebsiteSpecResult> {
@@ -405,7 +412,10 @@ export class OpenRouterProvider extends BaseAIProvider {
     );
 
     logger.info({ provider: this.name, rawLength: raw.length, rawPreview: raw.substring(0, 200) }, "Raw response from OpenRouter");
-    return this.validateBlueprint(raw) as unknown as BlueprintResult;
+    const validated = this.validateBlueprint(raw) as unknown as BlueprintResult;
+    console.log("[BP-DATA] OpenRouter validated keys", Object.keys(validated));
+    console.log("[BP-DATA] OpenRouter validated", JSON.stringify(validated, null, 2));
+    return validated;
   }
 
   async generateWebsiteSpec(blueprint: BlueprintResult): Promise<WebsiteSpecResult> {

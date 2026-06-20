@@ -94,15 +94,57 @@ async function handleBlueprintGeneration(
     const prompt = payload.prompt as string;
     logger.info({ jobId: job.data.jobId, startupId, promptLength: prompt?.length }, "Calling generateBlueprintWithFallback");
     const blueprint = await generateBlueprintWithFallback(prompt);
+    console.log("[BP-DATA] blueprint from provider", JSON.stringify(blueprint, null, 2));
+    console.log("[BP-DATA] blueprint keys", Object.keys(blueprint));
+    console.log("[BP-DATA] blueprint type", typeof blueprint);
     logger.info({ jobId: job.data.jobId, blueprintKeys: Object.keys(blueprint), blueprintName: blueprint?.name }, "generateBlueprintWithFallback returned");
 
-    const created = await prisma.blueprint.create({
-      data: {
-        startupId,
-        content: blueprint as unknown as Prisma.InputJsonValue,
-      },
-    });
-    logger.info({ jobId: job.data.jobId, blueprintId: created.id, contentKeys: Object.keys(created.content as object) }, "Blueprint created in DB");
+    // Evidence: force deterministic JSON serialization so we know exactly what we persist
+    const contentToPersist: unknown = JSON.parse(JSON.stringify(blueprint));
+
+    logger.info(
+      `[BP-DATA] contentToPersist before Prisma jobId=${job.data.jobId} type=${typeof contentToPersist} isArray=${Array.isArray(contentToPersist)} keys=${
+        contentToPersist && typeof contentToPersist === "object" && !Array.isArray(contentToPersist)
+          ? Object.keys(contentToPersist as object).length
+          : 0
+      }`,
+    );
+    console.log("[BP-DATA] contentToPersist (stringified)", JSON.stringify(contentToPersist, null, 2));
+
+    const createPayload = {
+      startupId,
+      content: contentToPersist as unknown as Prisma.InputJsonValue,
+    };
+
+    logger.info(
+      `[BP-DATA] prisma create payload summary jobId=${job.data.jobId} payloadKeys=${Object.keys(createPayload).join(",")} contentKeys=${
+        createPayload.content && typeof createPayload.content === "object" && !Array.isArray(createPayload.content)
+          ? Object.keys(createPayload.content as object).length
+          : 0
+      }`,
+    );
+    console.log("[BP-DATA] prisma create payload", JSON.stringify(createPayload, null, 2));
+
+    const created = await prisma.blueprint.create({ data: createPayload });
+
+    logger.info(
+      `[BP-DATA] created blueprint content summary jobId=${job.data.jobId} contentType=${typeof created.content} isArray=${Array.isArray(
+        created.content as unknown as object,
+      )} keys=${
+        created.content && typeof created.content === "object" && !Array.isArray(created.content as unknown as object)
+          ? Object.keys(created.content as unknown as object).length
+          : 0
+      }`,
+    );
+    console.log("[BP-DATA] created blueprint content", JSON.stringify(created.content, null, 2));
+
+    logger.info(
+      `[BP-DATA] Blueprint created in DB jobId=${job.data.jobId} blueprintId=${created.id} keys=${
+        created.content && typeof created.content === "object" && !Array.isArray(created.content as unknown as object)
+          ? Object.keys(created.content as unknown as object).length
+          : 0
+      }`,
+    );
 
     await prisma.job.update({
       where: { id: job.data.jobId },
