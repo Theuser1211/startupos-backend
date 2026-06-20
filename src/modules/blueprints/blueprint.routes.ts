@@ -2,6 +2,17 @@ import { FastifyInstance } from "fastify";
 import { generateBlueprintHandler, getBlueprintHandler } from "./blueprint.handler.js";
 import { authenticate } from "../../middleware/auth.js";
 
+const blueprintResponse = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    content: { type: "object" },
+    createdAt: { type: "string", format: "date-time" },
+    updatedAt: { type: "string", format: "date-time" },
+    startupId: { type: "string" },
+  },
+};
+
 export async function blueprintRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", authenticate);
 
@@ -46,7 +57,7 @@ export async function blueprintRoutes(app: FastifyInstance): Promise<void> {
         200: {
           type: "object",
           properties: {
-            blueprint: { type: "object" },
+            blueprint: blueprintResponse,
           },
         },
       },
