@@ -1,0 +1,9 @@
+[deploy]
+kind = "docker"
+healthcheckPath = "/health"
+healthcheckTimeout = 10
+restartPolicyType = "always"
+restartPolicyMaxRetries = 5
+
+[service]
+port = 3000
