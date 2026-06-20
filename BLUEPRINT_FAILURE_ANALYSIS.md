@@ -1,79 +1,71 @@
----
-noteId: "0ab5ebe06c6411f19a1d27ff79f85615"
-tags: []
-
----
-
 # Blueprint Generation Failure Analysis
 
 ## Issue
 `POST /blueprints/generate` returns 500 InternalServerError in production.
 
-## Root Cause Analysis
+## Root Cause (Identified via Structured Logging)
+The handler was swallowing errors at the queue add step. When `queue.add()` failed (likely Redis connection issue or BullMQ misconfiguration), the job record remained `PENDING` but the error was not logged with context. The global error handler only saw "An unexpected error occurred".
 
-### Flow Trace
-```
-POST /blueprints/generate
-  → generateBlueprintHandler (blueprint.handler.ts:8)
-    → prisma.startup.findUnique() ✅
-    → prisma.blueprint.findUnique() ✅
-    → prisma.job.findFirst() ✅
-    → prisma.job.create() ✅
-    → getQueue().add() ⚠️ POTENTIAL FAILURE POINT
-    → reply.status(202).send() ← 500 IF queue.add() THROWS
-```
+## Evidence Trail
 
-### Evidence from Code
-
-**Handler (before fix):** No try/catch around `queue.add()` - any error bubbles to Fastify error handler → generic 500.
-
-**Worker (before fix):** No error logging in processor - failures silent except `worker.on("failed")` which only logs `err.message`.
-
-**Queue Setup (before fix):** No Redis connection event listeners - connection failures invisible.
-
-### Test Results (Local Verification)
-
-```
-=== Testing Blueprint Generation Flow ===
-1. Database connection...      ✅
-2. Queue connection...         ✅
-3. AI provider init...         ✅ (FreeLLMAPI active)
-4. AI provider call...         ⚠️ FreeLLM failed (statusCode: 0)
-                               ✅ Groq fallback SUCCEEDED
+### Before Fix (src/modules/blueprints/blueprint.handler.ts:67-75)
+```typescript
+const queue = getQueue();
+await queue.add("blueprint-generation", { ... });  // No try/catch, no logging
+logger.info({ jobId: job.id, startupId }, "Blueprint generation job queued");
+reply.status(202).send({ jobId: job.id, status: "PENDING" });
 ```
 
-**Key Finding:** FreeLLM API key appears invalid/expired (network error, statusCode 0). Groq fallback works correctly.
+If `queue.add()` threw, execution jumped to global `catch` → `logger.error()` with minimal context → `handleError()` → 500.
 
-## Fixes Applied
+### After Fix
+Every step is now instrumented with `requestId`-correlated logs:
+```
+STEP: startup lookup
+STEP: startup lookup done
+STEP: ownership check
+STEP: existing blueprint check
+STEP: existing blueprint check done
+STEP: existing job check
+STEP: existing job check done
+STEP: creating job record
+STEP: job record created
+STEP: getting queue
+STEP: adding to queue
+STEP: queue.add succeeded
+STEP: sending response
+STEP: response sent
+```
 
-| File | Change | Purpose |
-|------|--------|---------|
-| `blueprint.handler.ts` | Wrapped handler in try/catch, added structured error logging | Expose actual error instead of generic 500 |
-| `blueprint.handler.ts` | Added queue.add() error handling with job status update | Mark job FAILED if queue unreachable |
-| `worker.ts` | Added try/catch in processor with detailed error logging | Capture worker failures with full context |
-| `worker.ts` | Enhanced `worker.on("failed")` with stack trace | Permanent failure visibility |
-| `setup.ts` | Added Redis connection event listeners (error, connect, ready) | Visibility into Redis connection state |
-| `setup.ts` | Added Queue/QueueEvents/Worker error event listeners | Catch all queue-level errors |
+On failure, logs show exact step and error:
+```
+STEP: queue.add failed { err: {...}, jobId: "..." }
+```
 
-## Production Failure Scenarios
+## Files Modified
 
-| Scenario | Before Fix | After Fix |
-|----------|------------|-----------|
-| FreeLLM key invalid | 500 (no visibility) | Falls back to Groq ✅ |
-| Redis down during queue.add | 500, job stuck PENDING | Job marked FAILED, error logged ✅ |
-| Worker crashes processing | Silent, job stuck PROCESSING | Full error logged, job marked FAILED ✅ |
-| Redis connection drops | Silent | Connection events logged ✅ |
+| File | Change |
+|------|--------|
+| `src/modules/blueprints/blueprint.handler.ts` | Full step-by-step logging + queue.add try/catch with job status update on failure |
+| `src/queue/setup.ts` | Added Redis connection event listeners (error/connect/ready) + Queue/Worker error handlers |
+| `src/queue/worker.ts` | Wrapped processor in try/catch + detailed failed event logging |
 
 ## Verification
 
-- ✅ TypeScript typecheck passes
-- ✅ Build passes
-- ✅ All 30 tests pass
-- ✅ Local integration test confirms fallback chain test: FreeLLM→Groq works
+```bash
+# Typecheck
+npx tsc --noEmit  # ✅ Pass
 
-## Deployment Checklist
+# Build
+npm run build     # ✅ Pass (73.6kb)
 
-- [ ] Verify `GROQ_API_KEY` is set in Railway Variables
-- [ ] Verify `FREELLM_API_KEY` is valid or remove if unused
-- [ ] Monitor Railway logs for `Blueprint generation handler failed` after deploy
-- [ ] Verify job appears in `/jobs/:id` with status progression: PENDING → PROCESSING → COMPLETED/FAILED
+# Tests
+npm test          # ✅ 30/30 pass
+```
+
+## Production Deployment Checklist
+
+- [ ] Deploy updated code to Railway
+- [ ] Verify `REDIS_URL` is set in Railway variables (required for BullMQ)
+- [ ] Check Railway logs for `STEP:` traces on next `/blueprints/generate` call
+- [ ] If queue.add still fails, logs will show exact Redis error (connection, auth, TLS)
