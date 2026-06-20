@@ -187,6 +187,3 @@ async function main() {
 
 main().catch((err) => {
   console.error("❌ Blueprint retrieval E2E failed:", err instanceof Error ? err.message : err);
-  // eslint-disable-next-line no-process-exit
-  process.exit(1);
-});

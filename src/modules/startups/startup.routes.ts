@@ -21,20 +21,28 @@ const startupResponse = {
       type: ["object", "null"],
       properties: {
         id: { type: "string" },
-        content: { type: "object" },
+        content: {
+          type: "object",
+          properties: {},
+          additionalProperties: true,
+        },
         createdAt: { type: "string", format: "date-time" },
         updatedAt: { type: "string", format: "date-time" },
       },
     },
     websites: {
       type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          name: { type: "string" },
-          content: { type: "object" },
-          status: { type: "string" },
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              name: { type: "string" },
+              content: {
+                type: "object",
+                properties: {},
+                additionalProperties: true,
+              },
+              status: { type: "string" },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
           deployment: {

@@ -27,7 +27,11 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
                 id: { type: "string" },
                 type: { type: "string" },
                 status: { type: "string" },
-                result: { type: "object" },
+                result: {
+                  type: "object",
+                  properties: {},
+                  additionalProperties: true,
+                },
                 error: { type: "string" },
                 createdAt: { type: "string" },
                 updatedAt: { type: "string" },
