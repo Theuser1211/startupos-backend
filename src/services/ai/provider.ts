@@ -101,9 +101,13 @@ export abstract class BaseAIProvider implements AIProvider {
   }
 
   protected validateBlueprint(raw: string): ValidatedBlueprint {
+    logger.info({ rawLength: raw.length, rawPreview: raw.substring(0, 200) }, "Raw AI response for blueprint");
     const parsed = this.parseJSONResponse<Record<string, unknown>>(raw);
+    logger.info({ parsedKeys: Object.keys(parsed) }, "Parsed blueprint object");
     const normalized = normalizeBlueprint(parsed);
-    return BlueprintResultSchema.parse(normalized);
+    const validated = BlueprintResultSchema.parse(normalized);
+    logger.info({ validatedKeys: Object.keys(validated), validatedName: validated.name }, "Validated blueprint");
+    return validated;
   }
 
   protected validateWebsiteSpec(raw: string): ValidatedWebsiteSpec {
@@ -224,6 +228,7 @@ Return ONLY valid JSON with this exact structure:
       ],
     );
 
+    logger.info({ provider: this.name, rawLength: raw.length, rawPreview: raw.substring(0, 200) }, "Raw response from FreeLLM");
     return this.validateBlueprint(raw) as unknown as BlueprintResult;
   }
 
@@ -319,6 +324,7 @@ Return ONLY valid JSON with this exact structure:
       ],
     );
 
+    logger.info({ provider: this.name, rawLength: raw.length, rawPreview: raw.substring(0, 200) }, "Raw response from Groq");
     return this.validateBlueprint(raw) as unknown as BlueprintResult;
   }
 
@@ -398,6 +404,7 @@ export class OpenRouterProvider extends BaseAIProvider {
       ],
     );
 
+    logger.info({ provider: this.name, rawLength: raw.length, rawPreview: raw.substring(0, 200) }, "Raw response from OpenRouter");
     return this.validateBlueprint(raw) as unknown as BlueprintResult;
   }
 
