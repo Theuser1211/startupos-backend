@@ -1,0 +1,24 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - link "StartupOS" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "StartupOS" [ref=e7]
+    - main [ref=e8]:
+      - generic [ref=e9]:
+        - link "Back" [ref=e10] [cursor=pointer]:
+          - /url: /blueprints
+          - img [ref=e11]
+          - text: Back
+        - button "Refresh" [ref=e14]:
+          - img
+          - text: Refresh
+      - generic [ref=e16]:
+        - img [ref=e17]
+        - paragraph [ref=e19]: Select a startup to view your daily brief
+        - link "View My Startups" [ref=e20] [cursor=pointer]:
+          - /url: /blueprints
+  - generic "Notifications"
+  - alert [ref=e21]

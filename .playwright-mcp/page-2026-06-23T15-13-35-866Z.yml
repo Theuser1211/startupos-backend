@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - generic [ref=e7]:
+      - link "StartupOS" [ref=e8] [cursor=pointer]:
+        - /url: /
+        - img "StartupOS" [ref=e9]
+      - generic [ref=e11]: Step 1 of 5
+    - generic [ref=e22]:
+      - generic [ref=e24]: Question 1 of 4
+      - heading "What are you building?" [level=2] [ref=e25]
+      - paragraph [ref=e26]: Describe your startup in one clear sentence.
+      - generic [ref=e28]:
+        - generic [ref=e29]: Describe your startup idea in one sentence
+        - textbox "Describe your startup idea in one sentence" [ref=e30]:
+          - /placeholder: AI lawyer for startups
+      - generic [ref=e31]:
+        - button "Back" [disabled]:
+          - img
+          - text: Back
+        - button "Continue" [disabled]:
+          - text: Continue
+          - img
+    - paragraph [ref=e34]: StartupOS Beta · Your data stays private
+  - generic "Notifications"
+  - alert [ref=e35]

@@ -1,0 +1,22 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - link "StartupOS" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "StartupOS" [ref=e7]
+    - main [ref=e8]:
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - heading "My Startups" [level=1] [ref=e11]
+          - paragraph [ref=e12]: 0 startups saved
+        - link "New Startup" [ref=e13] [cursor=pointer]:
+          - /url: /interview
+          - img
+          - text: New Startup
+      - generic [ref=e15]:
+        - img [ref=e16]
+        - paragraph [ref=e18]: Loading your startups...
+  - generic "Notifications"
+  - alert [ref=e19]

@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "StartupOS" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - img "StartupOS" [ref=e7]
+        - button "User menu" [ref=e10]:
+          - generic [ref=e11]: Q
+          - generic [ref=e12]: qa-test-0623@startupos-test.com
+          - img [ref=e13]
+    - main [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "My Startups" [level=1] [ref=e18]
+          - paragraph [ref=e19]: 0 startups saved
+        - link "New Startup" [ref=e20] [cursor=pointer]:
+          - /url: /interview
+          - img
+          - text: New Startup
+      - generic [ref=e22]:
+        - img [ref=e23]
+        - paragraph [ref=e25]: Loading your startups...
+  - generic "Notifications"
+  - alert [ref=e26]

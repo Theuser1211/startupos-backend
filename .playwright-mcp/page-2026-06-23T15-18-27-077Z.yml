@@ -1,0 +1,104 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "StartupOS" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - img "StartupOS" [ref=e9]
+        - button [ref=e10]:
+          - img [ref=e12]
+    - main [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e44]:
+          - generic [ref=e46]:
+            - img [ref=e48]
+            - generic [ref=e51]: AI-Powered Startup OS — Now in Beta
+          - heading "Build Your Startup OS" [level=1] [ref=e52]:
+            - text: Build Your
+            - text: Startup OS
+          - paragraph [ref=e53]: The operating system for modern founders. Clarify your vision, align your team, and execute with precision — all powered by AI that understands your startup.
+          - link "Start Building Free" [ref=e56] [cursor=pointer]:
+            - /url: /interview
+            - generic [ref=e57]:
+              - text: Start Building Free
+              - generic [ref=e58]:
+                - img
+          - paragraph [ref=e60]: From idea to blueprint in minutes — no MBA required
+        - generic [ref=e64]: Scroll to explore
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - generic [ref=e74]: ◆
+            - text: Everything you need
+          - heading "The Complete Founder Toolkit" [level=2] [ref=e75]
+          - paragraph [ref=e76]: From ideation to Series A, StartupOS provides every tool you need to build a successful company — no MBA required.
+        - generic [ref=e77]:
+          - generic [ref=e80]:
+            - generic [ref=e81]:
+              - img [ref=e84]
+              - generic [ref=e92]: AI Founder Coach
+            - generic [ref=e94]: Get personalized insights and strategic advice from an AI that understands your specific startup context, stage, and goals.
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - img [ref=e101]
+              - generic [ref=e105]: ICP Builder
+            - generic [ref=e107]: Define and refine your Ideal Customer Profile with AI-driven market analysis and persona development tools.
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - img [ref=e114]
+              - generic [ref=e119]: Smart Roadmap
+            - generic [ref=e121]: Generate dynamic product roadmaps that adapt to your progress, market changes, and user feedback in real-time.
+          - generic [ref=e124]:
+            - generic [ref=e125]:
+              - img [ref=e128]
+              - generic [ref=e130]: Revenue Modeling
+            - generic [ref=e132]: Build sophisticated financial models with AI-powered projections, scenario planning, and unit economics analysis.
+          - generic [ref=e135]:
+            - generic [ref=e136]:
+              - img [ref=e139]
+              - generic [ref=e141]: Brand Strategy
+            - generic [ref=e143]: Develop a cohesive brand identity with AI-generated guidelines, messaging frameworks, and visual direction.
+          - generic [ref=e146]:
+            - generic [ref=e147]:
+              - img [ref=e150]
+              - generic [ref=e152]: Startup Roast
+            - generic [ref=e154]: Get brutally honest feedback on your startup from AI that identifies blind spots, risks, and growth opportunities.
+      - generic [ref=e163]:
+        - generic [ref=e164]:
+          - img [ref=e166]
+          - generic [ref=e169]: Start Free — No Credit Card
+        - heading "Ready to Build Your Startup OS?" [level=2] [ref=e170]
+        - paragraph [ref=e171]: Clarify your vision, align your team, and move faster — all powered by AI that understands your startup.
+        - link "Start Building Free" [ref=e174] [cursor=pointer]:
+          - /url: /interview
+          - generic [ref=e175]:
+            - text: Start Building Free
+            - generic [ref=e176]:
+              - img
+        - paragraph [ref=e178]: Free tier includes full workspace access. No credit card required.
+    - contentinfo [ref=e179]:
+      - generic [ref=e180]:
+        - link "StartupOS" [ref=e182] [cursor=pointer]:
+          - /url: /
+          - img "StartupOS" [ref=e184]
+        - navigation [ref=e185]:
+          - link "Features" [ref=e187] [cursor=pointer]:
+            - /url: "#features"
+            - text: Features
+          - link "About" [ref=e189] [cursor=pointer]:
+            - /url: /about
+            - text: About
+          - link "Privacy" [ref=e191] [cursor=pointer]:
+            - /url: /privacy
+            - text: Privacy
+          - link "Terms" [ref=e193] [cursor=pointer]:
+            - /url: /terms
+            - text: Terms
+          - link "Contact" [ref=e195] [cursor=pointer]:
+            - /url: /contact
+            - text: Contact
+        - paragraph [ref=e196]: © 2026 StartupOS. All rights reserved.
+  - generic "Notifications"
+  - alert [ref=e197]

@@ -1,0 +1,14 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e4]:
+    - img [ref=e6]
+    - heading "No blueprint yet" [level=2] [ref=e8]
+    - paragraph [ref=e9]: Complete the founder interview to generate your blueprint.
+    - link "Complete Interview" [ref=e10] [cursor=pointer]:
+      - /url: /interview
+      - button "Complete Interview" [ref=e11]:
+        - img
+        - text: Complete Interview
+  - generic "Notifications"
+  - alert [ref=e12]

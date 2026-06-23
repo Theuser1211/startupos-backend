@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "StartupOS" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - img "StartupOS" [ref=e7]
+        - generic [ref=e9]:
+          - link "My Startups" [ref=e10] [cursor=pointer]:
+            - /url: /blueprints
+            - button "My Startups" [ref=e11]
+          - button "Sign Out" [ref=e12]
+    - main [ref=e13]:
+      - generic [ref=e14]:
+        - link "Back" [ref=e15] [cursor=pointer]:
+          - /url: /dashboard?id=afd1cd4e-9291-489a-874b-39e558fd885e
+          - img [ref=e16]
+          - text: Back
+        - generic [ref=e18]:
+          - button "Refresh" [disabled]:
+            - img
+            - text: Refresh
+      - img [ref=e20]
+  - generic "Notifications"
+  - alert [ref=e22]

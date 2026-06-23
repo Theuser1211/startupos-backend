@@ -1,0 +1,31 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "StartupOS" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - img "StartupOS" [ref=e7]
+        - generic [ref=e9]:
+          - link "My Startups" [ref=e10] [cursor=pointer]:
+            - /url: /blueprints
+            - button "My Startups" [ref=e11]
+          - button "Sign Out" [ref=e12]
+    - main [ref=e13]:
+      - link "Back" [ref=e14] [cursor=pointer]:
+        - /url: /dashboard?id=afd1cd4e-9291-489a-874b-39e558fd885e
+        - img [ref=e15]
+        - text: Back
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - img [ref=e20]
+          - generic [ref=e22]:
+            - heading "Competitor Intelligence" [level=1] [ref=e23]
+            - paragraph [ref=e24]: Track competitors and detect changes over time
+        - button "Add Competitor" [ref=e25]:
+          - img
+          - text: Add Competitor
+      - img [ref=e27]
+  - generic "Notifications"
+  - alert [ref=e29]
