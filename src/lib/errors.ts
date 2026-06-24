@@ -51,6 +51,15 @@ export function handleError(reply: FastifyReply, error: unknown): void {
 
   reply.status(500).send({
     error: "InternalServerError",
-    message: "An unexpected error occurred",
+    message:
+      error instanceof Error
+        ? error.message
+        : String(error),
+    stack:
+      process.env.NODE_ENV !== "production"
+        ? error instanceof Error
+          ? error.stack
+          : undefined
+        : undefined,
   });
 }

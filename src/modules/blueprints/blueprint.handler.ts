@@ -1,9 +1,10 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../../db/client.js";
 import { GenerateBlueprintInput } from "./blueprint.schema.js";
-import { NotFoundError, ForbiddenError } from "../../lib/errors.js";
+import { AppError, NotFoundError, ForbiddenError } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
-import { getQueue } from "../../queue/setup.js";
+import { captureEvent } from "../dashboard/dashboard.service.js";
+import { generateBlueprintWithFallback } from "../../services/ai/provider.js";
 
 export async function generateBlueprintHandler(
   request: FastifyRequest<{ Body: GenerateBlueprintInput }>,
@@ -14,114 +15,73 @@ export async function generateBlueprintHandler(
   const userId = request.user!.userId;
 
   try {
-    logger.info({ requestId }, "[BP2] startup lookup start");
+    logger.info({ requestId, startupId, userId, promptLength: prompt?.length }, "[BP] request received");
+
+    logger.info({ requestId, userId }, "[BP] user authenticated");
+
+    logger.info({ requestId, startupId }, "[BP] startup lookup start");
     const startup = await prisma.startup.findUnique({
       where: { id: startupId },
       select: { userId: true, description: true },
     });
-    logger.info({ requestId, found: !!startup }, "[BP2] startup lookup done");
+    logger.info({ requestId, startupId, found: !!startup }, "[BP] startup lookup done");
 
     if (!startup) {
-      logger.warn({ requestId, startupId }, "[BP2] startup not found");
+      logger.warn({ requestId, startupId }, "[BP] startup not found");
       throw new NotFoundError("Startup");
     }
 
     const effectivePrompt = prompt ?? startup.description ?? "";
     if (!effectivePrompt || effectivePrompt.length < 10) {
-      logger.warn({ requestId, startupId }, "[BP3] prompt missing or too short");
+      logger.warn({ requestId, startupId }, "[BP] prompt missing or too short");
       throw new Error("Prompt is required (provide in request or set startup description)");
     }
 
-    logger.info({ requestId, startupId, userId, promptLength: effectivePrompt?.length }, "[BP1] request received");
-    logger.info({ requestId, ownerMatch: startup.userId === userId }, "[BP3] ownership check");
+    logger.info({ requestId, startupId, ownerMatch: startup.userId === userId }, "[BP] ownership check passed");
     if (startup.userId !== userId) {
-      logger.warn({ requestId, startupId, userId }, "[BP3] forbidden");
+      logger.warn({ requestId, startupId, userId }, "[BP] ownership check failed");
       throw new ForbiddenError("You do not own this startup");
     }
 
-    logger.info({ requestId }, "[BP4] existing blueprint check");
+    logger.info({ requestId, startupId }, "[BP] existing blueprint lookup start");
     const existingBlueprint = await prisma.blueprint.findUnique({
       where: { startupId },
     });
-    logger.info({ requestId, exists: !!existingBlueprint }, "[BP4] existing blueprint check done");
+    logger.info({ requestId, startupId, exists: !!existingBlueprint }, "[BP] existing blueprint lookup done");
 
     if (existingBlueprint) {
-      logger.info({ requestId }, "[BP4] returning existing blueprint");
-      reply.send({
-        jobId: null,
-        blueprint: existingBlueprint,
-        message: "Blueprint already exists for this startup",
-      });
+      logger.info({ requestId, startupId }, "[BP] returning existing blueprint");
+      await captureEvent(startupId, "BLUEPRINT_GENERATED", { existing: true });
+      reply.send({ blueprint: existingBlueprint });
       return;
     }
 
-    logger.info({ requestId }, "[BP5] existing job check");
-    const existingJob = await prisma.job.findFirst({
-      where: {
-        startupId,
-        type: "BLUEPRINT_GENERATION",
-        status: { in: ["PENDING", "PROCESSING"] },
-      },
-    });
-    logger.info({ requestId, exists: !!existingJob }, "[BP5] existing job check done");
+    logger.info({ requestId, startupId, promptLength: effectivePrompt.length }, "[BP] AI provider call start");
+    const blueprintContent = await generateBlueprintWithFallback(effectivePrompt);
+    logger.info({ requestId, startupId, name: blueprintContent.name }, "[BP] AI provider call succeeded");
 
-    if (existingJob) {
-      logger.info({ requestId, existingJobId: existingJob.id }, "[BP5] returning existing job");
-      reply.status(202).send({
-        jobId: existingJob.id,
-        status: existingJob.status,
-        message: "Blueprint generation already in progress",
-      });
-      return;
-    }
-
-    logger.info({ requestId }, "[BP6] creating job record");
-    const job = await prisma.job.create({
+    logger.info({ requestId, startupId }, "[BP] blueprint persistence start");
+    const blueprint = await prisma.blueprint.create({
       data: {
-        type: "BLUEPRINT_GENERATION",
-        status: "PENDING",
-        payload: { startupId, prompt: effectivePrompt },
         startupId,
+        content: blueprintContent as unknown as object,
       },
     });
-    logger.info({ requestId, jobId: job.id }, "[BP6] job record created");
+    logger.info({ requestId, startupId, blueprintId: blueprint.id }, "[BP] blueprint persistence succeeded");
 
-    logger.info({ requestId }, "[BP7] getting queue");
-    const queue = getQueue();
-    logger.info({ requestId, jobId: job.id }, "[BP8] queue.add start");
-    try {
-      await queue.add("blueprint-generation", {
-        jobId: job.id,
+    await captureEvent(startupId, "BLUEPRINT_GENERATED", { blueprintId: blueprint.id });
+
+    reply.send({ blueprint });
+  } catch (error: unknown) {
+    logger.error(
+      {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
         startupId,
         userId,
-        type: "BLUEPRINT_GENERATION",
-        payload: { prompt: effectivePrompt },
-      });
-    } catch (queueError: unknown) {
-      const qe = queueError as Error;
-      logger.error({ requestId, err: queueError, jobId: job.id, name: qe?.name, message: qe?.message, stack: qe?.stack }, "[BP8] queue.add FAILED");
-      await prisma.job.update({
-        where: { id: job.id },
-        data: {
-          status: "FAILED",
-          error: `Queue add failed: ${qe?.message ?? "Unknown"}`,
-        },
-      });
-      throw queueError;
-    }
-    logger.info({ requestId, jobId: job.id }, "[BP8] queue.add succeeded");
-
-    logger.info({ requestId, jobId: job.id }, "[BP9] sending response");
-    reply.status(202).send({
-      jobId: job.id,
-      status: "PENDING",
-    });
-    logger.info({ requestId }, "[BP9] response sent");
-  } catch (error: unknown) {
-    const e = error as Error;
-    logger.error(
-      { requestId, err: error, name: e?.name, message: e?.message, stack: e?.stack, startupId, userId, promptLength: prompt?.length },
-      "[BP-ERR] handler failed",
+      },
+      "[BP-FATAL]",
     );
     throw error;
   }
