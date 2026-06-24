@@ -51,7 +51,8 @@ export class VercelProvider implements DeploymentProvider {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`Vercel deployment failed (${response.status}): ${errorBody}`);
+      logger.error({ status: response.status, errorBody }, "Vercel deployment failed");
+      throw new Error(`Vercel deployment failed (${response.status})`);
     }
 
     const data = await response.json() as {

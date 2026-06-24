@@ -8,6 +8,11 @@ import { logger } from "../../lib/logger.js";
 import { validateRenderedWebsite } from "./validate.js";
 import { renderHomeFallback, renderGenericFallback } from "./fallbacks/home.js";
 import { enrichWebsiteSpec } from "./spec-enricher.js";
+import DOMPurify from "dompurify";
+import { JSDOM } from "jsdom";
+
+const window = new JSDOM("").window;
+const purify = DOMPurify(window as any);
 
 export interface RenderResult {
   website: WebsiteResult;
@@ -47,7 +52,10 @@ export async function renderWebsite(
   }
 
   const result: WebsiteResult = {
-    pages,
+    pages: pages.map((page) => ({
+      ...page,
+      html: purify.sanitize(page.html),
+    })),
     css: "",
     js: "",
   };

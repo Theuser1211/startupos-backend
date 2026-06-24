@@ -860,17 +860,36 @@ async function tryProvider<T>(
   action: (p: AIProvider) => Promise<T>,
 ): Promise<{ result: T; providerName: string }> {
   const start = Date.now();
-  logger.info({ provider: provider.name, providerId }, "Attempting AI provider");
+
+  const entry = providerRegistry["entries"]?.get(providerId) as { model?: string } | undefined;
+  const modelName = entry?.model ?? "unknown";
+
+  logger.info(
+    { provider: provider.name, providerId, model: modelName, action: action.toString().substring(0, 60) },
+    "AI provider: attempting",
+  );
   try {
     const result = await action(provider);
     const duration = Date.now() - start;
-    logger.info({ provider: provider.name, providerId, durationMs: duration }, "AI provider succeeded");
+    logger.info(
+      { provider: provider.name, providerId, model: modelName, durationMs: duration },
+      "AI provider: succeeded",
+    );
     providerRegistry.recordSuccess(providerId, duration);
     return { result, providerName: provider.name };
   } catch (error) {
     const duration = Date.now() - start;
     const statusCode = error instanceof AIProviderError ? error.statusCode : 0;
-    logger.warn({ provider: provider.name, providerId, statusCode, durationMs: duration, error }, "AI provider failed");
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const stackTrace = error instanceof Error ? error.stack : undefined;
+    logger.warn(
+      {
+        provider: provider.name, providerId, model: modelName,
+        statusCode, durationMs: duration,
+        error: errorMessage, stack: stackTrace,
+      },
+      "AI provider: failed — will attempt next provider in fallback chain",
+    );
     providerRegistry.recordFailure(providerId, statusCode, duration);
     throw error;
   }
@@ -884,19 +903,30 @@ export function getAIProvider(): AIProvider {
   if (env.FREELLM_API_KEY) {
     return new FreeLLMProvider();
   }
-  throw new Error("No AI provider configured. Set GOOGLE_API_KEY_1, GROQ_API_KEY, NIM_API_KEY_1, OPENROUTER_API_KEY, or FREELLM_API_KEY.");
+  const errorMsg = "No AI provider configured. Set GOOGLE_API_KEY_1, GROQ_API_KEY, NIM_API_KEY_1, OPENROUTER_API_KEY, or FREELLM_API_KEY.";
+  logger.error(errorMsg);
+  throw new Error("No AI provider configured");
 }
 
 async function withFailover<T>(
   action: (p: AIProvider) => Promise<T>,
   context: string,
 ): Promise<T> {
-  const errors: Array<{ provider: string; error: string }> = [];
+  const errors: Array<{ provider: string; model: string; error: string; statusCode: number }> = [];
+  const availableCount = providerRegistry.getEntryCount();
+  const hasFreeLLM = !!env.FREELLM_API_KEY;
 
-  if (env.FREELLM_API_KEY) {
+  logger.info(
+    { availableProviders: availableCount, hasFreeLLM, context },
+    "AI provider: starting fallback chain",
+  );
+
+  if (hasFreeLLM) {
     const provider = new FreeLLMProvider();
     try {
+      logger.info({ provider: "FreeLLMAPI", model: "gpt-4o-mini" }, "AI provider: attempting FreeLLMAPI");
       const { result } = await tryProvider("freellm", provider, action);
+      logger.info({ provider: "FreeLLMAPI" }, "AI provider: FreeLLMAPI succeeded");
       return result;
     } catch (error) {
       const message = error instanceof AIProviderError
@@ -906,12 +936,14 @@ async function withFailover<T>(
           : error instanceof Error
             ? error.message
             : "Unknown error";
-      errors.push({ provider: "FreeLLMAPI", error: message });
+      const statusCode = error instanceof AIProviderError ? error.statusCode : 0;
+      errors.push({ provider: "FreeLLMAPI", model: "gpt-4o-mini", error: message, statusCode });
+      logger.warn({ provider: "FreeLLMAPI", error: message }, "AI provider: FreeLLMAPI failed, trying next in chain");
     }
   }
 
   let attemptCount = 0;
-  const maxAttempts = providerRegistry.getEntryCount() + 1;
+  const maxAttempts = availableCount + 1;
 
   while (attemptCount < maxAttempts) {
     const entry = providerRegistry.getNextAvailableProvider();
@@ -920,7 +952,9 @@ async function withFailover<T>(
     attemptCount++;
     const provider = entry.createProvider();
     try {
+      logger.info({ provider: entry.provider, model: entry.model, id: entry.id, attempt: attemptCount, total: availableCount }, "AI provider: attempting");
       const { result } = await tryProvider(entry.id, provider, action);
+      logger.info({ provider: entry.provider, model: entry.model }, "AI provider: succeeded");
       return result;
     } catch (error) {
       const message = error instanceof AIProviderError
@@ -930,18 +964,35 @@ async function withFailover<T>(
           : error instanceof Error
             ? error.message
             : "Unknown error";
-      errors.push({ provider: entry.id, error: message });
+      const statusCode = error instanceof AIProviderError ? error.statusCode : 0;
+      errors.push({ provider: entry.id, model: entry.model, error: message, statusCode });
+
+      const remaining = availableCount - attemptCount + (hasFreeLLM ? 0 : 0);
+      logger.warn(
+        { provider: entry.provider, model: entry.model, id: entry.id, remainingProviders: remaining, error: message },
+        "AI provider: failed — trying next",
+      );
     }
   }
 
-  const detail = errors.map((e) => `${e.provider}: ${e.error}`).join(" | ");
+  const detail = errors.map((e) => `${e.provider} (${e.model}): [${e.statusCode}] ${e.error}`).join(" | ");
   const prefix = context ? `${context}: ` : "";
-  throw new Error(`${prefix}All AI providers failed: ${detail}`);
+  const fullError = `${prefix}All AI providers failed (tried ${errors.length} providers): ${detail}`;
+  logger.error({ errors: errors.map(e => ({ provider: e.provider, model: e.model, statusCode: e.statusCode, error: e.error })) }, fullError);
+  throw new Error(fullError);
 }
 
 export async function generateBlueprintWithFallback(prompt: string): Promise<BlueprintResult> {
-  if (providerRegistry.getEntryCount() === 0 && !env.FREELLM_API_KEY) {
-    throw new Error("No AI provider configured.");
+  const availableCount = providerRegistry.getEntryCount();
+  const hasFreeLLM = !!env.FREELLM_API_KEY;
+  logger.info(
+    { promptLength: prompt.length, availableProviders: availableCount, hasFreeLLM },
+    "generateBlueprintWithFallback: starting",
+  );
+  if (availableCount === 0 && !hasFreeLLM) {
+    const error = "No AI provider configured. Set GOOGLE_API_KEY_1, GROQ_API_KEY, NIM_API_KEY_1, OPENROUTER_API_KEY, or FREELLM_API_KEY.";
+    logger.error({ availableProviders: 0, hasFreeLLM: false }, error);
+    throw new Error("No AI provider configured");
   }
   return withFailover((p) => p.generateBlueprint(prompt), "");
 }

@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { registerHandler, loginHandler, meHandler } from "./auth.handler.js";
+import { registerHandler, loginHandler, meHandler, refreshTokenHandler } from "./auth.handler.js";
 import { authenticate } from "../../middleware/auth.js";
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
@@ -67,6 +67,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, loginHandler);
+
+  app.post("/auth/refresh", {
+    schema: {
+      tags: ["Auth"],
+      description: "Refresh auth token",
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            token: { type: "string" },
+          },
+        },
+      },
+    },
+  }, refreshTokenHandler);
 
   app.get("/auth/me", {
     preHandler: [authenticate],

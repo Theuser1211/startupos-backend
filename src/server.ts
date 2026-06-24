@@ -3,13 +3,9 @@ import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import Redis from "ioredis";
 import { env } from "./lib/env.js";
 import { logger } from "./lib/logger.js";
 import { prisma } from "./db/client.js";
-import { closeQueue } from "./queue/setup.js";
-import { startWorker } from "./queue/worker.js";
-import { startJobMonitor, stopJobMonitor } from "./queue/monitor.js";
 import { handleError } from "./lib/errors.js";
 import { providerRegistry } from "./services/ai/provider-registry.js";
 
@@ -19,6 +15,7 @@ import { blueprintRoutes } from "./modules/blueprints/blueprint.routes.js";
 import { websiteRoutes } from "./modules/websites/website.routes.js";
 import { deploymentRoutes } from "./modules/deployments/deployment.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
+
 
 async function checkDatabase(): Promise<void> {
   try {
@@ -30,32 +27,9 @@ async function checkDatabase(): Promise<void> {
   }
 }
 
-async function checkRedis(): Promise<void> {
-  const redisUrl = env.REDIS_URL;
-  if (!redisUrl) {
-    logger.warn("No REDIS_URL set — skipping Redis connectivity check");
-    return;
-  }
-  const redis = new Redis(redisUrl, {
-    maxRetriesPerRequest: 1,
-    connectTimeout: 5_000,
-    lazyConnect: true,
-    ...(redisUrl.startsWith("rediss://") ? { tls: {} } : {}),
-  });
-  try {
-    await redis.connect();
-    await redis.ping();
-    logger.info("Redis connection verified");
-  } catch (err) {
-    logger.fatal(err, "Redis unreachable — exiting");
-    process.exit(1);
-  } finally {
-    await redis.quit();
-  }
-}
-
 const app = Fastify({
   logger: true,
+  bodyLimit: 1048576,
 });
 
 async function bootstrap(): Promise<void> {
@@ -188,11 +162,8 @@ async function bootstrap(): Promise<void> {
   await app.register(deploymentRoutes);
   await app.register(jobRoutes);
 
-  await checkDatabase();
-  await checkRedis();
 
-  startWorker();
-  startJobMonitor();
+  await checkDatabase();
 
   await app.listen({ port: env.PORT, host: env.HOST });
   logger.info(`Server running on http://${env.HOST}:${env.PORT}`);
@@ -206,21 +177,16 @@ bootstrap().catch((err) => {
 
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down...");
-  stopJobMonitor();
   await app.close();
   await prisma.$disconnect();
-  await closeQueue();
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
   logger.info("SIGINT received, shutting down...");
-  stopJobMonitor();
   await app.close();
   await prisma.$disconnect();
-  await closeQueue();
   process.exit(0);
 });
 
 export { app, bootstrap };
-
