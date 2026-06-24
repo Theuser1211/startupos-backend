@@ -5,3 +5,8 @@ dist/
 *.log
 .DS_Store
 prisma/*.db
+.playwright-mcp/
+*.pyc
+__pycache__/
+*.png
+*.txt

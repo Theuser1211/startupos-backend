@@ -3,7 +3,6 @@ import { prisma } from "../../db/client.js";
 import { GenerateBlueprintInput } from "./blueprint.schema.js";
 import { AppError, NotFoundError, ForbiddenError } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
-
 import { generateBlueprintWithFallback } from "../../services/ai/provider.js";
 
 export async function generateBlueprintHandler(
@@ -51,6 +50,7 @@ export async function generateBlueprintHandler(
 
     if (existingBlueprint) {
       logger.info({ requestId, startupId }, "[BP] returning existing blueprint");
+
       reply.send({ blueprint: existingBlueprint });
       return;
     }
@@ -92,7 +92,7 @@ export async function getBlueprintHandler(
   const userId = request.user!.userId;
 
   const blueprint = await prisma.blueprint.findUnique({
-    where: { id },
+    where: { startupId: id },
     include: {
       startup: { select: { userId: true, name: true } },
     },
