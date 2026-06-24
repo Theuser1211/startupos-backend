@@ -3,7 +3,9 @@ import { prisma } from "../../db/client.js";
 import { GenerateWebsiteInput } from "./website.schema.js";
 import { NotFoundError, ForbiddenError } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
-import { getQueue } from "../../queue/setup.js";
+import { generateWebsiteSpecWithFallback } from "../../services/ai/provider.js";
+import { renderWebsite } from "../../services/renderer/index.js";
+import type { BlueprintResult } from "../../types/ai.js";
 
 export async function generateWebsiteHandler(
   request: FastifyRequest<{ Body: GenerateWebsiteInput }>,
@@ -25,6 +27,17 @@ export async function generateWebsiteHandler(
     throw new ForbiddenError("You do not own this startup");
   }
 
+  const existingWebsite = await prisma.website.findFirst({
+    where: { startupId },
+    include: { spec: true, deployment: true },
+  });
+
+  if (existingWebsite) {
+    logger.info({ startupId, websiteId: existingWebsite.id }, "Website already exists, returning existing");
+    reply.send({ website: existingWebsite });
+    return;
+  }
+
   const blueprint = await prisma.blueprint.findUnique({
     where: { startupId },
   });
@@ -33,47 +46,33 @@ export async function generateWebsiteHandler(
     throw new NotFoundError("Blueprint. Generate a blueprint first.");
   }
 
-  const existingJob = await prisma.job.findFirst({
-    where: {
-      startupId,
-      type: "WEBSITE_GENERATION",
-      status: { in: ["PENDING", "PROCESSING"] },
-    },
-  });
+  const bpContent = blueprint.content as unknown as BlueprintResult;
 
-  if (existingJob) {
-    reply.status(202).send({
-      jobId: existingJob.id,
-      status: existingJob.status,
-      message: "Website generation already in progress",
-    });
-    return;
-  }
+  logger.info({ startupId }, "[SYNC] calling AI provider for website spec");
+  const websiteSpec = await generateWebsiteSpecWithFallback(bpContent);
+  logger.info({ startupId, pages: websiteSpec.pages.length }, "[SYNC] website spec generated");
 
-  const job = await prisma.job.create({
+  const renderResult = await renderWebsite(bpContent, websiteSpec);
+  logger.info({ startupId, pagesGenerated: renderResult.stats.pagesGenerated }, "[SYNC] website rendered");
+
+  const website = await prisma.website.create({
     data: {
-      type: "WEBSITE_GENERATION",
-      status: "PENDING",
-      payload: { startupId, blueprintId: blueprint.id },
+      name: startup.name,
+      content: renderResult.website as unknown as object,
+      status: "rendered",
       startupId,
+      spec: {
+        create: {
+          content: websiteSpec as unknown as object,
+        },
+      },
     },
+    include: { spec: true, deployment: true },
   });
 
-  const queue = getQueue();
-  await queue.add("website-generation", {
-    jobId: job.id,
-    startupId,
-    userId,
-    type: "WEBSITE_GENERATION",
-    payload: { blueprintId: blueprint.id, startupName: startup.name },
-  });
+  logger.info({ websiteId: website.id, startupId }, "[SYNC] website persisted");
 
-  logger.info({ jobId: job.id, startupId }, "Website generation job queued");
-
-  reply.status(202).send({
-    jobId: job.id,
-    status: "PENDING",
-  });
+  reply.send({ website });
 }
 
 export async function getWebsiteHandler(

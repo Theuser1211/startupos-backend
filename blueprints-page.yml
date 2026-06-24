@@ -1,0 +1,42 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "StartupOS" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - img "StartupOS" [ref=e7]
+        - button "User menu" [ref=e10]:
+          - generic [ref=e11]: Q
+          - generic [ref=e12]: qa-qa-audit@test.com
+          - img [ref=e13]
+    - main [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "My Startups" [level=1] [ref=e18]
+          - paragraph [ref=e19]: 1 startup saved
+        - link "New Startup" [ref=e20] [cursor=pointer]:
+          - /url: /interview
+          - img
+          - text: New Startup
+      - generic [ref=e28]:
+        - img [ref=e31]
+        - heading "AI-powered Customer" [level=3] [ref=e34]
+        - paragraph
+        - generic [ref=e36]: ecommerce
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - img [ref=e39]
+            - text: Jun 23
+          - generic [ref=e41]:
+            - link "Dashboard" [ref=e42] [cursor=pointer]:
+              - /url: /dashboard?id=91e73291-f4b7-4a1e-b060-584ca6d4c86e
+            - link "Competitors" [ref=e43] [cursor=pointer]:
+              - /url: /competitors?startupId=91e73291-f4b7-4a1e-b060-584ca6d4c86e
+            - link "Open" [ref=e44] [cursor=pointer]:
+              - /url: /workspace?id=91e73291-f4b7-4a1e-b060-584ca6d4c86e
+              - text: Open
+              - img
+  - generic "Notifications"
+  - alert [ref=e26]

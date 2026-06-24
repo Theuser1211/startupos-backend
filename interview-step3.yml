@@ -1,0 +1,39 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e36]:
+    - generic [ref=e40]:
+      - link "StartupOS" [ref=e41] [cursor=pointer]:
+        - /url: /
+        - img "StartupOS" [ref=e42]
+      - generic [ref=e44]: Step 3 of 5
+    - generic [ref=e91]:
+      - generic [ref=e93]: Question 3 of 4
+      - heading "Who are you building for?" [level=2] [ref=e94]
+      - paragraph [ref=e95]: Define your target customer and how you'll charge them.
+      - generic [ref=e96]:
+        - generic [ref=e97]:
+          - generic [ref=e98]: Target Customer
+          - combobox "Target Customer" [ref=e99] [cursor=pointer]:
+            - generic: Small Businesses (B2B, <50 employees)
+            - img [ref=e100]
+        - generic [ref=e102]:
+          - generic [ref=e103]: Business Model
+          - combobox "Business Model" [ref=e104] [cursor=pointer]:
+            - generic: Subscription (monthly/yearly per seat)
+            - img [ref=e105]
+        - generic [ref=e107]:
+          - generic [ref=e108]: Target Price Range
+          - combobox "Target Price Range" [ref=e109] [cursor=pointer]:
+            - generic: Select an option...
+            - img [ref=e110]
+      - generic [ref=e112]:
+        - button "Back" [ref=e113]:
+          - img
+          - text: Back
+        - button "Continue" [disabled]:
+          - text: Continue
+          - img
+    - paragraph [ref=e68]: StartupOS Beta · Your data stays private
+  - generic "Notifications"
+  - alert [ref=e30]

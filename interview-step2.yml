@@ -1,0 +1,34 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e36]:
+    - generic [ref=e40]:
+      - link "StartupOS" [ref=e41] [cursor=pointer]:
+        - /url: /
+        - img "StartupOS" [ref=e42]
+      - generic [ref=e44]: Step 2 of 5
+    - generic [ref=e71]:
+      - generic [ref=e73]: Question 2 of 4
+      - heading "Where are you now?" [level=2] [ref=e74]
+      - paragraph [ref=e75]: Help us understand your current stage and market.
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - generic [ref=e78]: Current Stage
+          - combobox "Current Stage" [ref=e79] [cursor=pointer]:
+            - generic: Ideation — just an idea, no product yet
+            - img [ref=e80]
+        - generic [ref=e82]:
+          - generic [ref=e83]: Industry
+          - combobox "Industry" [ref=e84] [cursor=pointer]:
+            - generic: SaaS / Software
+            - img [ref=e85]
+      - generic [ref=e87]:
+        - button "Back" [ref=e88]:
+          - img
+          - text: Back
+        - button "Continue" [ref=e89]:
+          - text: Continue
+          - img
+    - paragraph [ref=e68]: StartupOS Beta · Your data stays private
+  - generic "Notifications"
+  - alert [ref=e30]
