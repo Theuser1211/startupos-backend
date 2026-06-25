@@ -15,7 +15,9 @@ import { blueprintRoutes } from "./modules/blueprints/blueprint.routes.js";
 import { websiteRoutes } from "./modules/websites/website.routes.js";
 import { deploymentRoutes } from "./modules/deployments/deployment.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
-
+import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
+import { competitorRoutes } from "./modules/competitors/competitor.routes.js";
+import { briefRoutes } from "./modules/brief/brief.routes.js";
 
 async function checkDatabase(): Promise<void> {
   try {
@@ -34,7 +36,11 @@ const app = Fastify({
 
 async function bootstrap(): Promise<void> {
   await app.register(cors, {
-    origin: true,
+    origin: [
+      "https://startupos-black.vercel.app",
+      "http://localhost:3000",
+      ...(env.PUBLIC_URL ? [env.PUBLIC_URL] : []),
+    ],
     credentials: true,
   });
 
@@ -161,9 +167,13 @@ async function bootstrap(): Promise<void> {
   await app.register(websiteRoutes);
   await app.register(deploymentRoutes);
   await app.register(jobRoutes);
-
+  await app.register(dashboardRoutes);
+  await app.register(competitorRoutes);
+  await app.register(briefRoutes);
 
   await checkDatabase();
+
+  logger.info(app.printRoutes());
 
   await app.listen({ port: env.PORT, host: env.HOST });
   logger.info(`Server running on http://${env.HOST}:${env.PORT}`);
