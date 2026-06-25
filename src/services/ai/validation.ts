@@ -92,6 +92,18 @@ export const WebsiteResultSchema = z.object({
   js: z.string().default(""),
 });
 
+export function extractJSON(raw: string): string {
+  let cleaned = raw.trim();
+  const jsonStart = cleaned.indexOf("{");
+  const jsonEnd = cleaned.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    cleaned = cleaned.slice(jsonStart, jsonEnd + 1);
+  }
+  cleaned = cleaned.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+  cleaned = cleaned.replace(/([{,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+  return cleaned;
+}
+
 export type ValidatedBlueprint = z.infer<typeof BlueprintResultSchema>;
 export type ValidatedWebsiteSpec = z.infer<typeof WebsiteSpecResultSchema>;
 export type ValidatedPageHTML = z.infer<typeof PageHTMLResultSchema>;
