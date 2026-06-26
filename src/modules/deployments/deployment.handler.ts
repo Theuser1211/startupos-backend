@@ -7,6 +7,7 @@ import { buildDeployFiles } from "../../services/deploy/builder.js";
 import { VercelProvider } from "../../services/deploy/vercel.js";
 import { verifyDeployment } from "../../services/deploy/verify.js";
 import { env } from "../../lib/env.js";
+import { captureEvent } from "../dashboard/dashboard.service.js";
 
 export async function createDeploymentHandler(
   request: FastifyRequest<{ Body: { websiteId: string } }>,
@@ -181,6 +182,8 @@ export async function deployWebsiteHandler(
       data: { status: "LIVE", url, provider },
     });
 
+    await captureEvent(website.startupId, "WEBSITE_DEPLOYED", { websiteId, url, provider, verified });
+
     logger.info({ deploymentId: deployment.id, url, provider, verified }, "Deployment completed");
 
     reply.send({
@@ -200,6 +203,8 @@ export async function deployWebsiteHandler(
       where: { id: deployment.id },
       data: { status: "FAILED", error: message },
     });
+
+    await captureEvent(website.startupId, "DEPLOYMENT_FAILED", { websiteId, error: message });
 
     logger.error({ deploymentId: deployment.id, error: message }, "Deployment failed");
 

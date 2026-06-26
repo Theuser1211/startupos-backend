@@ -1,14 +1,4 @@
-import { JobStatus, JobType } from "@prisma/client";
-
-export interface JobResponse {
-  id: string;
-  type: JobType;
-  status: JobStatus;
-  result?: unknown;
-  error?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import { JobType } from "@prisma/client";
 
 export interface JobQueuePayload {
   jobId: string;

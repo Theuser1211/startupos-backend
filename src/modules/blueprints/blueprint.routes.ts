@@ -34,11 +34,10 @@ export async function blueprintRoutes(app: FastifyInstance): Promise<void> {
         },
       },
       response: {
-        202: {
+        200: {
           type: "object",
           properties: {
-            jobId: { type: "string" },
-            status: { type: "string" },
+            blueprint: blueprintResponse,
           },
         },
       },

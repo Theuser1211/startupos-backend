@@ -33,11 +33,10 @@ export async function websiteRoutes(app: FastifyInstance): Promise<void> {
         },
       },
       response: {
-        202: {
+        200: {
           type: "object",
           properties: {
-            jobId: { type: "string" },
-            status: { type: "string" },
+            website: websiteResponse,
           },
         },
       },

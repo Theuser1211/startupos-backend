@@ -1,15 +1,9 @@
-export interface JwtPayload {
-  userId: string;
-  email: string;
-}
+import type { JwtPayload } from "@startupos/shared";
 
-export interface AuthRequest {
-  userId: string;
-  email: string;
-}
+export type { JwtPayload };
 
 declare module "fastify" {
   interface FastifyRequest {
-    user?: AuthRequest;
+    user?: JwtPayload;
   }
 }

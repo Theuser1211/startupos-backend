@@ -3,6 +3,7 @@ import { prisma } from "../../db/client.js";
 import { GenerateBlueprintInput } from "./blueprint.schema.js";
 import { AppError, NotFoundError, ForbiddenError } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
+import { captureEvent } from "../dashboard/dashboard.service.js";
 import { generateBlueprintWithFallback } from "../../services/ai/provider.js";
 
 export async function generateBlueprintHandler(
@@ -50,7 +51,7 @@ export async function generateBlueprintHandler(
 
     if (existingBlueprint) {
       logger.info({ requestId, startupId }, "[BP] returning existing blueprint");
-
+      await captureEvent(startupId, "BLUEPRINT_GENERATED", { existing: true });
       reply.send({ blueprint: existingBlueprint });
       return;
     }
@@ -67,6 +68,8 @@ export async function generateBlueprintHandler(
       },
     });
     logger.info({ requestId, startupId, blueprintId: blueprint.id }, "[BP] blueprint persistence succeeded");
+
+    await captureEvent(startupId, "BLUEPRINT_GENERATED", { blueprintId: blueprint.id });
 
     reply.send({ blueprint });
   } catch (error: unknown) {

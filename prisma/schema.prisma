@@ -55,6 +55,11 @@ model Startup {
   blueprint Blueprint?
   websites  Website[]
   jobs      Job[]
+  events    StartupEvent[]
+  healthSnapshots HealthScoreSnapshot[]
+  actions   FounderAction[]
+  competitors Competitor[]
+  briefs      DailyBrief[]
 
   @@index([userId])
 }
@@ -122,6 +127,119 @@ model Job {
 
   @@index([startupId])
   @@index([status])
+}
+
+enum EventType {
+  STARTUP_CREATED
+  BLUEPRINT_GENERATED
+  BLUEPRINT_VIEWED
+  WEBSITE_GENERATED
+  WEBSITE_DEPLOYED
+  DEPLOYMENT_FAILED
+  DASHBOARD_VIEWED
+}
+
+model StartupEvent {
+  id        String    @id @default(uuid())
+  type      EventType
+  metadata  Json?
+  createdAt DateTime  @default(now())
+
+  startupId String
+  startup   Startup   @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+  @@index([startupId, createdAt])
+}
+
+model HealthScoreSnapshot {
+  id        String   @id @default(uuid())
+  score     Int
+  createdAt DateTime @default(now())
+
+  startupId String
+  startup   Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+  @@index([startupId, createdAt])
+}
+
+model FounderAction {
+  id          String   @id @default(uuid())
+  action      String
+  description String
+  priority    String   @default("medium")
+  link        String?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  startupId String
+  startup   Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+}
+
+model Competitor {
+  id          String   @id @default(uuid())
+  name        String
+  website     String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  startupId String
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  snapshots CompetitorSnapshot[]
+  changes   CompetitorChange[]
+
+  @@index([startupId])
+}
+
+model CompetitorSnapshot {
+  id          String   @id @default(uuid())
+  title       String
+  summary     String?
+  pricing     String?
+  features    Json?
+  rawContent  String?
+  capturedAt  DateTime @default(now())
+
+  competitorId String
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+  @@index([competitorId, capturedAt])
+}
+
+model CompetitorChange {
+  id          String   @id @default(uuid())
+  type        String
+  oldValue    String?
+  newValue    String?
+  detectedAt  DateTime @default(now())
+
+  competitorId String
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+  @@index([competitorId, detectedAt])
+}
+
+model DailyBrief {
+  id                String   @id @default(uuid())
+  summary           String
+  wins              Json
+  priorities        Json
+  competitorUpdates Json
+  generatedAt       DateTime @default(now())
+
+  startupId String
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+  @@index([startupId, generatedAt])
 }
 
 model ApiLog {

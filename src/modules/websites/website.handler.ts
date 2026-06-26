@@ -3,9 +3,10 @@ import { prisma } from "../../db/client.js";
 import { GenerateWebsiteInput } from "./website.schema.js";
 import { NotFoundError, ForbiddenError } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
+import { captureEvent } from "../dashboard/dashboard.service.js";
 import { generateWebsiteSpecWithFallback } from "../../services/ai/provider.js";
 import { renderWebsite } from "../../services/renderer/index.js";
-import type { BlueprintResult } from "../../types/ai.js";
+import type { BlueprintResult, WebsiteSpecResult } from "../../types/ai.js";
 
 export async function generateWebsiteHandler(
   request: FastifyRequest<{ Body: GenerateWebsiteInput }>,
@@ -69,6 +70,8 @@ export async function generateWebsiteHandler(
     },
     include: { spec: true, deployment: true },
   });
+
+  await captureEvent(startupId, "WEBSITE_GENERATED", { websiteId: website.id });
 
   logger.info({ websiteId: website.id, startupId }, "[SYNC] website persisted");
 

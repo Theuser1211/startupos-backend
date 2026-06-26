@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../../db/client.js";
 import { CreateStartupInput } from "./startup.schema.js";
 import { NotFoundError, ForbiddenError } from "../../lib/errors.js";
+import { captureEvent } from "../dashboard/dashboard.service.js";
 
 export async function createStartupHandler(
   request: FastifyRequest<{ Body: CreateStartupInput }>,
@@ -19,6 +20,8 @@ export async function createStartupHandler(
       userId,
     },
   });
+
+  await captureEvent(startup.id, "STARTUP_CREATED", { name });
 
   reply.status(201).send({ startup });
 }

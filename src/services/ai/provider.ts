@@ -48,6 +48,7 @@ export abstract class BaseAIProvider implements AIProvider {
     }, TIMEOUT_MS);
 
     try {
+      logger.info({ provider: this.name, url: endpoint, model }, "[AI] sending request");
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -62,6 +63,8 @@ export abstract class BaseAIProvider implements AIProvider {
         }),
         signal: controller.signal,
       });
+
+      logger.info({ provider: this.name, status: response.status }, "[AI] response");
 
       if (!response.ok) {
         if (response.status === 429) {
@@ -81,6 +84,7 @@ export abstract class BaseAIProvider implements AIProvider {
       }
       return content;
     } catch (error) {
+      logger.error({ provider: this.name, error, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, "[AI] provider failed");
       if (error instanceof AIProviderError) throw error;
       if (error instanceof Error && error.name === "AbortError") {
         throw new AIProviderError(this.name, 0, `Request timed out after ${TIMEOUT_MS}ms`);
@@ -114,16 +118,24 @@ export abstract class BaseAIProvider implements AIProvider {
   }
 
   protected validateWebsiteSpec(raw: string): ValidatedWebsiteSpec {
+    logger.debug({ rawLength: raw.length, rawPreview: raw.substring(0, 300) }, "[WEBSITE] raw model response");
+
     const extracted = extractJSON(raw);
-    logger.debug({ rawLength: raw.length, extractedLength: extracted.length }, "[WEBSITE] Raw AI response");
+    logger.debug({ extractedLength: extracted?.length, extractedPreview: extracted?.substring(0, 300) }, "[WEBSITE] extracted json");
+
+    if (!extracted) {
+      throw new AIProviderError(this.name, 0, "Failed to extract JSON from model response");
+    }
+
     const parsed = this.parseJSONResponse<Record<string, unknown>>(extracted);
-    const keys = Object.keys(parsed);
-    logger.debug({ parsedKeys: keys }, `[WEBSITE] Parsed object with keys: ${keys.join(", ")}`);
+
     try {
       return WebsiteSpecResultSchema.parse(parsed);
-    } catch (zodError) {
-      logger.warn({ zodError: zodError instanceof Error ? zodError.message : String(zodError), parsedKeys: keys }, "[WEBSITE] Zod validation failed on extracted JSON");
-      throw zodError;
+    } catch (error) {
+      if (error instanceof ZodError) {
+        logger.error({ zodErrors: error.errors }, "[WEBSITE] zod validation error");
+      }
+      throw error;
     }
   }
 
@@ -933,12 +945,14 @@ async function withFailover<T>(
 
   if (hasFreeLLM) {
     const provider = new FreeLLMProvider();
+    logger.info({ provider: "freellm", model: "gpt-4o-mini", apiKeyExists: !!env.FREELLM_API_KEY }, "[AI] attempting provider");
     try {
       logger.info({ provider: "FreeLLMAPI", model: "gpt-4o-mini" }, "AI provider: attempting FreeLLMAPI");
       const { result } = await tryProvider("freellm", provider, action);
       logger.info({ provider: "FreeLLMAPI" }, "AI provider: FreeLLMAPI succeeded");
       return result;
     } catch (error) {
+      logger.error({ provider: "freellm", error, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, "[AI] provider failed");
       const message = error instanceof AIProviderError
         ? `[${error.provider}] status=${error.statusCode} ${error.message}`
         : error instanceof ZodError
@@ -961,12 +975,14 @@ async function withFailover<T>(
 
     attemptCount++;
     const provider = entry.createProvider();
+    logger.info({ provider: entry.id, model: entry.model, apiKeyExists: !!entry.apiKey }, "[AI] attempting provider");
     try {
       logger.info({ provider: entry.provider, model: entry.model, id: entry.id, attempt: attemptCount, total: availableCount }, "AI provider: attempting");
       const { result } = await tryProvider(entry.id, provider, action);
       logger.info({ provider: entry.provider, model: entry.model }, "AI provider: succeeded");
       return result;
     } catch (error) {
+      logger.error({ provider: entry.id, error, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, "[AI] provider failed");
       const message = error instanceof AIProviderError
         ? `[${error.provider}] status=${error.statusCode} ${error.message}`
         : error instanceof ZodError
@@ -1007,42 +1023,10 @@ export async function generateBlueprintWithFallback(prompt: string): Promise<Blu
   return withFailover((p) => p.generateBlueprint(prompt), "");
 }
 
-export function buildFallbackWebsiteSpec(blueprint: BlueprintResult): WebsiteSpecResult {
-  logger.warn({ blueprintName: blueprint.name }, "Building fallback website spec from blueprint data");
-  const industry = blueprint.industry || "technology";
-  const colorMap: Record<string, { primary: string; secondary: string }> = {
-    "fintech": { primary: "#0F766E", secondary: "#14B8A6" },
-    "finance": { primary: "#0F766E", secondary: "#14B8A6" },
-    "healthcare": { primary: "#059669", secondary: "#10B981" },
-    "health": { primary: "#059669", secondary: "#10B981" },
-    "devtools": { primary: "#2563EB", secondary: "#7C3AED" },
-    "saas": { primary: "#2563EB", secondary: "#7C3AED" },
-    "ai": { primary: "#7C3AED", secondary: "#2563EB" },
-    "ml": { primary: "#7C3AED", secondary: "#2563EB" },
-    "ecommerce": { primary: "#E11D48", secondary: "#BE185D" },
-    "education": { primary: "#7C3AED", secondary: "#8B5CF6" },
-    "security": { primary: "#1E293B", secondary: "#475569" },
-    "enterprise": { primary: "#4F46E5", secondary: "#6366F1" },
-    "creative": { primary: "#EC4899", secondary: "#F43F5E" },
-    "food": { primary: "#E11D48", secondary: "#F97316" },
-    "marketplace": { primary: "#0891B2", secondary: "#6366F1" },
-  };
-  const matched = Object.entries(colorMap).find(([key]) => industry.toLowerCase().includes(key));
-  const colors = matched ? matched[1] : { primary: "#2563EB", secondary: "#7C3AED" };
-  const keyFeatureItems = (blueprint.keyFeatures || []).map((f) => ({
-    title: typeof f === "string" ? f : (f as { name?: string; description?: string }).name || "Feature",
-    description: typeof f === "string" ? `Leverage ${f.toLowerCase()} to drive your business forward.` : (f as { name?: string; description?: string }).description || `Powerful ${typeof f === "string" ? f : (f as { name?: string; description?: string }).name || "feature"} capabilities for your team.`,
-  }));
-  const plans = [
-    { name: "Starter", price: "$0", period: "month", description: "Get started with basic features", features: ["Core features", "Basic support", "Community access"], highlighted: false },
-    { name: "Pro", price: "$29", period: "month", description: "For growing teams", features: ["Everything in Starter", "Advanced features", "Priority support", "Analytics dashboard"], highlighted: true },
-    { name: "Enterprise", price: "Custom", period: "", description: "For large organizations", features: ["Everything in Pro", "Dedicated support", "Custom integrations", "SLA"], highlighted: false },
-  ];
-  const faqItems = [
-    { question: `What is ${blueprint.name}?`, answer: blueprint.description || `${blueprint.name} is a ${industry} solution that helps ${blueprint.targetAudience || "businesses"} ${(blueprint.solution || "solve their challenges").toLowerCase()}.` },
-    { question: "How does pricing work?", answer: blueprint.monetization || "We offer flexible pricing plans to suit teams of all sizes. Check our pricing section for details." },
-    { question: "How fast can I get started?", answer: "Get started in minutes with our simple onboarding process. No credit card required for the Starter plan." },
-  ];
+function buildFallbackWebsiteSpec(blueprint: BlueprintResult): WebsiteSpecResult {
+  const features = (blueprint.keyFeatures || []).slice(0, 6).map((f) =>
+    typeof f === "string" ? { title: f, description: "" } : { title: String(f), description: "" },
+  );
 
   return {
     pages: [
@@ -1051,60 +1035,48 @@ export function buildFallbackWebsiteSpec(blueprint: BlueprintResult): WebsiteSpe
         slug: "/",
         sections: [
           {
-            type: "hero", order: 1, content: {
-              headline: `${blueprint.name}: ${blueprint.solution || "Transform Your Business"}`,
-              subheadline: `Built for ${blueprint.targetAudience || "modern teams"} in the ${industry} industry. ${blueprint.description || ""}`,
-              ctaText: "Get Started Free",
+            type: "hero",
+            order: 1,
+            content: {
+              headline: blueprint.name,
+              subheadline: blueprint.description,
+              ctaText: "Get Started",
               ctaSecondary: "Learn More",
             },
           },
           {
-            type: "problem", order: 2, content: {
-              headline: "The Problem",
-              description: blueprint.problemStatement || "Teams face significant challenges in this space.",
-              painPoints: ["Manual processes slowing you down", "Limited visibility into operations", "Scaling without the right tools", "High costs with low efficiency"],
+            type: "features",
+            order: 2,
+            content: {
+              title: "Features",
+              subtitle: `${blueprint.name} offers powerful features to help you succeed`,
+              items: features,
             },
           },
           {
-            type: "solution", order: 3, content: {
-              headline: `How ${blueprint.name} Solves This`,
-              description: blueprint.solution || `Our platform provides the tools you need to succeed.`,
-              benefits: ["Streamlined workflows", "Data-driven insights", "Team collaboration", "Scalable infrastructure"],
+            type: "pricing",
+            order: 3,
+            content: {
+              headline: "Simple Pricing",
+              subtitle: blueprint.monetization || "Start free, upgrade as you grow",
+              plans: [],
             },
           },
           {
-            type: "features", order: 4, content: {
-              title: "Key Features",
-              subtitle: `Everything you need to ${(blueprint.solution || "succeed").toLowerCase()}`,
-              items: keyFeatureItems,
-            },
-          },
-          {
-            type: "pricing", order: 5, content: {
-              headline: "Simple, transparent pricing",
-              subtitle: blueprint.monetization || "Choose the plan that fits your needs.",
-              plans,
-            },
-          },
-          {
-            type: "faq", order: 6, content: {
-              subtitle: "Common questions about our platform",
-              items: faqItems,
-            },
-          },
-          {
-            type: "cta", order: 7, content: {
-              headline: `Ready to transform with ${blueprint.name}?`,
-              subheadline: "Join thousands of satisfied customers. Start your journey today.",
-              ctaText: "Get Started Free",
+            type: "cta",
+            order: 4,
+            content: {
+              headline: `Ready to start with ${blueprint.name}?`,
+              subheadline: blueprint.description,
+              ctaText: "Get Started",
             },
           },
         ],
       },
     ],
     theme: {
-      primaryColor: colors.primary,
-      secondaryColor: colors.secondary,
+      primaryColor: "#2563EB",
+      secondaryColor: "#7C3AED",
       fontFamily: "Inter",
       borderRadius: "12px",
     },
@@ -1124,7 +1096,10 @@ export async function generateWebsiteSpecWithFallback(
   try {
     return await withFailover((p) => p.generateWebsiteSpec(blueprint), "");
   } catch (error) {
-    logger.warn({ error: error instanceof Error ? error.message : String(error) }, "All AI providers failed — building fallback website spec from blueprint");
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error) },
+      "[WEBSITE] all providers failed, building fallback spec from blueprint",
+    );
     return buildFallbackWebsiteSpec(blueprint);
   }
 }
