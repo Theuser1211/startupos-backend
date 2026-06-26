@@ -5,33 +5,29 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ openssl
 
 COPY package.json package-lock.json ./
-
-COPY apps/backend/package.json apps/backend/package.json
-COPY packages/shared/package.json packages/shared/package.json
+COPY packages/shared/ packages/shared/
+COPY prisma/ prisma/
 
 RUN npm ci --omit=optional
 
-COPY packages/shared/ packages/shared/
-RUN npm run build -w packages/shared
-
-COPY apps/backend/ apps/backend/
-RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma
-RUN npm run build -w apps/backend
+COPY . .
+RUN npm run build
+RUN npx prisma generate
 
 
 FROM node:22-alpine AS runner
 
-WORKDIR /app/apps/backend
+WORKDIR /app
 
 RUN apk add --no-cache openssl wget
 
 ENV NODE_ENV=production
 
-COPY --from=builder /app/node_modules /app/node_modules
-COPY --from=builder /app/packages/shared /app/packages/shared
-COPY --from=builder /app/apps/backend/dist ./dist
-COPY --from=builder /app/apps/backend/prisma ./prisma
-COPY --from=builder /app/apps/backend/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN chmod +x docker-entrypoint.sh
 
