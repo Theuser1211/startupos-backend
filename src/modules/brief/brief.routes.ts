@@ -19,40 +19,19 @@ export async function briefRoutes(app: FastifyInstance): Promise<void> {
         200: {
           type: "object",
           properties: {
+            id: { type: "string" },
             summary: { type: "string" },
-            marketNews: {
+            wins: { type: "array", items: { type: "string" } },
+            priorities: { type: "array", items: { type: "string" } },
+            competitorUpdates: { type: "array", items: { type: "string" } },
+            healthScore: { type: "number" },
+            healthHistory: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  title: { type: "string" },
-                  source: { type: "string" },
-                  url: { type: "string" },
-                  relevance: { type: "string" },
-                },
-              },
-            },
-            opportunities: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  area: { type: "string" },
-                  description: { type: "string" },
-                  impact: { type: "string" },
-                  effort: { type: "string" },
-                },
-              },
-            },
-            risks: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  category: { type: "string" },
-                  description: { type: "string" },
-                  severity: { type: "string" },
-                  mitigation: { type: "string" },
+                  score: { type: "number" },
+                  createdAt: { type: "string" },
                 },
               },
             },

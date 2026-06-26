@@ -118,78 +118,83 @@ function generateMockCompetitors(industry: string) {
 }
 
 export async function getCompetitorsForStartup(startupId: string) {
-  const rows = await prisma.competitor.findMany({
-    where: { startupId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      snapshots: {
-        orderBy: { capturedAt: "desc" },
-        take: 1,
+  try {
+    const rows = await prisma.competitor.findMany({
+      where: { startupId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        snapshots: {
+          orderBy: { capturedAt: "desc" },
+          take: 1,
+        },
+        changes: {
+          orderBy: { detectedAt: "desc" },
+          take: 3,
+        },
       },
-      changes: {
-        orderBy: { detectedAt: "desc" },
-        take: 3,
+    });
+
+    const mapped = rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      website: c.website,
+      description: c.description,
+      createdAt: c.createdAt.toISOString(),
+      updatedAt: c.updatedAt.toISOString(),
+      latestSnapshot: c.snapshots[0]
+        ? {
+            id: c.snapshots[0].id,
+            title: c.snapshots[0].title,
+            summary: c.snapshots[0].summary,
+            pricing: c.snapshots[0].pricing,
+            features: c.snapshots[0].features,
+            rawContent: c.snapshots[0].rawContent,
+            capturedAt: c.snapshots[0].capturedAt.toISOString(),
+          }
+        : null,
+      changes: c.changes.map((ch) => ({
+        id: ch.id,
+        type: ch.type,
+        oldValue: ch.oldValue,
+        newValue: ch.newValue,
+        detectedAt: ch.detectedAt.toISOString(),
+      })),
+    }));
+
+    if (mapped.length > 0) return mapped;
+
+    const blueprint = await prisma.blueprint.findUnique({
+      where: { startupId },
+      select: { content: true },
+    });
+
+    const industry = (blueprint?.content as { industry?: string } | null)?.industry ?? "SaaS / Software";
+    const mocks = generateMockCompetitors(industry);
+
+    return mocks.map((m) => ({
+      id: `mock-${m.name.toLowerCase().replace(/\s+/g, "-")}`,
+      name: m.name,
+      website: m.website,
+      description: m.description,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      latestSnapshot: {
+        id: `mock-snap-${m.name.toLowerCase().replace(/\s+/g, "-")}`,
+        title: `${m.name} — ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
+        summary: `${m.name} is a company in the ${industry} space.`,
+        pricing: "Contact for pricing",
+        features: { core: ["Product offering", "Customer support", "Documentation"], integrations: [], platforms: ["Web"] },
+        rawContent: `Mock snapshot for ${m.name} at ${m.website}. No external API configured.`,
+        capturedAt: new Date().toISOString(),
       },
-    },
-  });
-
-  const mapped = rows.map((c) => ({
-    id: c.id,
-    name: c.name,
-    website: c.website,
-    description: c.description,
-    createdAt: c.createdAt.toISOString(),
-    updatedAt: c.updatedAt.toISOString(),
-    latestSnapshot: c.snapshots[0]
-      ? {
-          id: c.snapshots[0].id,
-          title: c.snapshots[0].title,
-          summary: c.snapshots[0].summary,
-          pricing: c.snapshots[0].pricing,
-          features: c.snapshots[0].features,
-          rawContent: c.snapshots[0].rawContent,
-          capturedAt: c.snapshots[0].capturedAt.toISOString(),
-        }
-      : null,
-    changes: c.changes.map((ch) => ({
-      id: ch.id,
-      type: ch.type,
-      oldValue: ch.oldValue,
-      newValue: ch.newValue,
-      detectedAt: ch.detectedAt.toISOString(),
-    })),
-  }));
-
-  if (mapped.length > 0) return mapped;
-
-  const blueprint = await prisma.blueprint.findUnique({
-    where: { startupId },
-    select: { content: true },
-  });
-
-  const industry = (blueprint?.content as { industry?: string } | null)?.industry ?? "SaaS / Software";
-  const mocks = generateMockCompetitors(industry);
-
-  return mocks.map((m) => ({
-    id: `mock-${m.name.toLowerCase().replace(/\s+/g, "-")}`,
-    name: m.name,
-    website: m.website,
-    description: m.description,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    latestSnapshot: {
-      id: `mock-snap-${m.name.toLowerCase().replace(/\s+/g, "-")}`,
-      title: `${m.name} — ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
-      summary: `${m.name} is a company in the ${industry} space.`,
-      pricing: "Contact for pricing",
-      features: { core: ["Product offering", "Customer support", "Documentation"], integrations: [], platforms: ["Web"] },
-      rawContent: `Mock snapshot for ${m.name} at ${m.website}. No external API configured.`,
-      capturedAt: new Date().toISOString(),
-    },
-    changes: [
-      { id: `mock-chg-${m.name.toLowerCase().replace(/\s+/g, "-")}-1`, type: "pricing", oldValue: null, newValue: "Contact for pricing", detectedAt: new Date().toISOString() },
-    ],
-  }));
+      changes: [
+        { id: `mock-chg-${m.name.toLowerCase().replace(/\s+/g, "-")}-1`, type: "pricing", oldValue: null, newValue: "Contact for pricing", detectedAt: new Date().toISOString() },
+      ],
+    }));
+  } catch (err) {
+    logger.error(err, "Failed to get competitors for startup");
+    return [];
+  }
 }
 
 export async function getCompetitorHistory(competitorId: string) {
