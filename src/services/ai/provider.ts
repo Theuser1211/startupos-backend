@@ -5,6 +5,7 @@ import {
   PageSpec,
   PageHTMLResult,
   ThemeSpec,
+  SectionSpec,
 } from "../../types/ai.js";
 import { env } from "../../lib/env.js";
 import { logger } from "../../lib/logger.js";
@@ -12,17 +13,162 @@ import {
   BlueprintResultSchema,
   WebsiteSpecResultSchema,
   PageHTMLResultSchema,
+  MinimalWebsiteContentSchema,
   ValidatedBlueprint,
   ValidatedWebsiteSpec,
   ValidatedPageHTML,
   normalizeBlueprint,
   extractJSON,
 } from "./validation.js";
+import type { MinimalWebsiteContent } from "./validation.js";
 import { ZodError } from "zod";
 import { providerRegistry } from "./provider-registry.js";
 
 const TIMEOUT_MS = env.AI_TIMEOUT_MS;
-const WEBSITE_TIMEOUT_MS = env.WEBSITE_AI_TIMEOUT_MS;
+
+function buildMinimalWebsitePrompt(blueprint: BlueprintResult) {
+  return `You are a startup copywriter. Given a startup blueprint, generate ONLY the following JSON.
+Return ONLY valid JSON — no markdown, no explanation, no code fences.
+
+RULES:
+- Use ONLY data from the blueprint. Never fabricate testimonials, statistics, metrics, logos, customer names, or made-up numbers.
+- Features must be specific to THIS startup, not generic.
+- primaryColor should be a hex color appropriate for ${blueprint.industry || "technology"}.
+- tone should be one of: professional, friendly, bold, warm, technical, or playful.
+
+{
+  "headline": "A specific, benefit-driven headline",
+  "subheadline": "Clear value proposition expanding headline",
+  "about": "A 2-3 sentence description of what the startup does using only blueprint data",
+  "features": ["feature 1", "feature 2", "feature 3", "feature 4", "feature 5"],
+  "ctaText": "Action-oriented CTA text",
+  "primaryColor": "#HEXCOLOR",
+  "tone": "professional"
+}
+
+Blueprint:
+Name: ${blueprint.name}
+Description: ${blueprint.description}
+Industry: ${blueprint.industry}
+Problem: ${blueprint.problemStatement}
+Solution: ${blueprint.solution}
+Key Features: ${(blueprint.keyFeatures || []).map(f => typeof f === "string" ? f : (f as Record<string,unknown>).name || JSON.stringify(f)).join(", ")}
+Target Audience: ${blueprint.targetAudience}`;
+}
+
+function enrichMinimalToFullSpec(
+  minimal: MinimalWebsiteContent,
+  blueprint: BlueprintResult,
+): WebsiteSpecResult {
+  const features = minimal.features.map((f) => ({ title: f, description: "" }));
+  const industryColors: Record<string, { primary: string; secondary: string }> = {
+    fintech: { primary: "#0F766E", secondary: "#14B8A6" },
+    healthcare: { primary: "#059669", secondary: "#10B981" },
+    devtools: { primary: "#2563EB", secondary: "#7C3AED" },
+    "ai-ml": { primary: "#7C3AED", secondary: "#2563EB" },
+    ecommerce: { primary: "#E11D48", secondary: "#BE185D" },
+    education: { primary: "#7C3AED", secondary: "#8B5CF6" },
+    security: { primary: "#1E293B", secondary: "#475569" },
+    creative: { primary: "#EC4899", secondary: "#F43F5E" },
+    enterprise: { primary: "#4F46E5", secondary: "#6366F1" },
+  };
+  const industry = (blueprint.industry || "").toLowerCase();
+  let colorKey = "enterprise";
+  if (industry.includes("fin")) colorKey = "fintech";
+  else if (industry.includes("health")) colorKey = "healthcare";
+  else if (industry.includes("dev") || industry.includes("saas") || industry.includes("tech")) colorKey = "devtools";
+  else if (industry.includes("ai") || industry.includes("ml")) colorKey = "ai-ml";
+  else if (industry.includes("ecom") || industry.includes("retail")) colorKey = "ecommerce";
+  else if (industry.includes("edu")) colorKey = "education";
+  else if (industry.includes("sec") || industry.includes("cyber")) colorKey = "security";
+  else if (industry.includes("creative") || industry.includes("design")) colorKey = "creative";
+  const colors = industryColors[colorKey];
+
+  const sections: SectionSpec[] = [
+    {
+      type: "hero",
+      order: 1,
+      content: {
+        headline: minimal.headline,
+        subheadline: minimal.subheadline,
+        ctaText: minimal.ctaText,
+        ctaSecondary: "Learn More",
+      },
+    },
+  ];
+
+  let order = 2;
+  if (blueprint.problemStatement && blueprint.problemStatement.length > 10) {
+    sections.push({
+      type: "problem",
+      order: order++,
+      content: {
+        headline: `The ${blueprint.industry || "industry"} challenge`,
+        description: blueprint.problemStatement,
+        painPoints: [
+          blueprint.problemStatement.length > 120
+            ? blueprint.problemStatement.substring(0, 120) + "..."
+            : blueprint.problemStatement,
+        ],
+      },
+    });
+  }
+
+  if (blueprint.solution && blueprint.solution.length > 10) {
+    const keyFeatureNames = (blueprint.keyFeatures || []).slice(0, 4).map((f) =>
+      typeof f === "string" ? f : String((f as Record<string, unknown>).name || f),
+    );
+    sections.push({
+      type: "solution",
+      order: order++,
+      content: {
+        headline: `How ${blueprint.name} solves this`,
+        description: blueprint.solution,
+        benefits: keyFeatureNames.length > 0 ? keyFeatureNames : [blueprint.solution.substring(0, 120)],
+      },
+    });
+  }
+
+  sections.push({
+    type: "features",
+    order: order++,
+    content: {
+      title: "Features",
+      subtitle: `What ${blueprint.name} offers`,
+      items: features,
+    },
+  });
+
+  sections.push({
+    type: "cta",
+    order: order++,
+    content: {
+      headline: `Ready to start with ${blueprint.name}?`,
+      subheadline: minimal.subheadline,
+      ctaText: minimal.ctaText,
+    },
+  });
+
+  return {
+    pages: [
+      {
+        name: "Home",
+        slug: "/",
+        sections,
+      },
+    ],
+    theme: {
+      primaryColor: minimal.primaryColor || colors.primary,
+      secondaryColor: colors.secondary,
+      fontFamily: "Inter",
+      borderRadius: "12px",
+    },
+    components: [
+      { name: "Navbar", type: "navigation", props: {} },
+      { name: "Footer", type: "footer", props: {} },
+    ],
+  };
+}
 
 export abstract class BaseAIProvider implements AIProvider {
   abstract name: string;
@@ -42,16 +188,14 @@ export abstract class BaseAIProvider implements AIProvider {
     messages: Array<{ role: string; content: string }>,
     maxTokens = 8192,
     temperature = 0.3,
-    timeoutMs?: number,
   ): Promise<string> {
-    const effectiveTimeout = timeoutMs ?? TIMEOUT_MS;
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
-    }, effectiveTimeout);
+    }, TIMEOUT_MS);
 
     try {
-      logger.info({ provider: this.name, url: endpoint, model }, "[AI] sending request");
+      logger.info({ provider: this.name, url: endpoint, model, maxTokens, temperature }, "[Blueprint] Sending request");
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -67,30 +211,32 @@ export abstract class BaseAIProvider implements AIProvider {
         signal: controller.signal,
       });
 
-      logger.info({ provider: this.name, status: response.status }, "[AI] response");
-
       if (!response.ok) {
         if (response.status === 429) {
           const retryAfter = response.headers.get("retry-after");
           const delay = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
+          logger.warn({ provider: this.name, retryAfter: delay }, "[Blueprint] Rate limited, waiting");
           await new Promise((resolve) => setTimeout(resolve, delay));
           throw new AIProviderError(this.name, 429, `Rate limited (retry after ${delay}ms)`);
         }
         const errorBody = await response.text();
+        logger.error({ provider: this.name, status: response.status, errorBody: errorBody.substring(0, 500) }, "[Blueprint] Provider returned error");
         throw new AIProviderError(this.name, response.status, errorBody);
       }
 
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content;
       if (!content) {
+        logger.error({ provider: this.name, responseKeys: Object.keys(data) }, "[Blueprint] Empty content in provider response");
         throw new AIProviderError(this.name, 0, "Empty response from AI provider");
       }
+      logger.info({ provider: this.name, responseLength: content.length, finishReason: data.choices?.[0]?.finish_reason }, "[Blueprint] Response received");
       return content;
     } catch (error) {
       logger.error({ provider: this.name, error, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, "[AI] provider failed");
       if (error instanceof AIProviderError) throw error;
       if (error instanceof Error && error.name === "AbortError") {
-        throw new AIProviderError(this.name, 0, `Request timed out after ${effectiveTimeout}ms`);
+        throw new AIProviderError(this.name, 0, `Request timed out after ${TIMEOUT_MS}ms`);
       }
       throw new AIProviderError(this.name, 0, `Network error: ${error instanceof Error ? error.message : "Unknown"}`);
     } finally {
@@ -105,9 +251,16 @@ export abstract class BaseAIProvider implements AIProvider {
       .replace(/^```|```$/g, "")
       .trim();
     if (!cleaned) {
+      logger.error({ provider: this.name }, "[Blueprint] Empty response after cleaning markdown fences");
       throw new AIProviderError(this.name, 0, "Empty response after cleaning");
     }
-    return JSON.parse(cleaned) as T;
+    try {
+      return JSON.parse(cleaned) as T;
+    } catch (error) {
+      const preview = cleaned.substring(0, 500);
+      logger.error({ provider: this.name, rawPreview: preview }, "[Blueprint] JSON parse failed");
+      throw new AIProviderError(this.name, 0, `JSON parse error: ${error instanceof Error ? error.message : "Unknown"} — preview: ${preview.substring(0, 200)}`);
+    }
   }
 
   protected validateBlueprint(raw: string): ValidatedBlueprint {
@@ -145,6 +298,22 @@ export abstract class BaseAIProvider implements AIProvider {
   protected validatePageHTML(raw: string): ValidatedPageHTML {
     const parsed = this.parseJSONResponse<Record<string, unknown>>(raw);
     return PageHTMLResultSchema.parse(parsed);
+  }
+
+  protected validateMinimalContent(raw: string): MinimalWebsiteContent {
+    const extracted = extractJSON(raw);
+    if (!extracted) {
+      throw new AIProviderError(this.name, 0, "Failed to extract JSON");
+    }
+    const parsed = this.parseJSONResponse<Record<string, unknown>>(extracted);
+    try {
+      return MinimalWebsiteContentSchema.parse(parsed);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        logger.error({ zodErrors: error.errors }, "[WEBSITE] minimal content validation error");
+      }
+      throw error;
+    }
   }
 
   protected buildPageGenerationPrompt(
@@ -248,17 +417,18 @@ Return ONLY valid JSON with this exact structure:
   "competitorAnalysis": ["competitor1", "competitor2"],
   "roadmap": ["milestone1", "milestone2"],
   "brand": {
-    "mission": "Core mission statement (1-2 sentences)",
-    "values": ["value1", "value2", "value3"],
-    "tone": ["professional", "innovative"],
+    "mission": "Inspiring mission statement aligned with the startup's purpose",
+    "values": ["Value1", "Value2", "Value3", "Value4"],
+    "tone": ["Professional", "Approachable", "Confident", "Clear"],
     "colors": [
-      { "name": "Primary", "hex": "#2563EB" },
-      { "name": "Secondary", "hex": "#7C3AED" },
-      { "name": "Accent", "hex": "#10B981" }
+      { "name": "Primary", "hex": "#HEXCOLOR" },
+      { "name": "Secondary", "hex": "#HEXCOLOR" },
+      { "name": "Accent", "hex": "#HEXCOLOR" },
+      { "name": "Neutral", "hex": "#HEXCOLOR" }
     ],
     "typography": {
-      "heading": "Inter",
-      "body": "Inter"
+      "heading": "Font name for headings",
+      "body": "Font name for body text"
     }
   }
 }`;
@@ -279,142 +449,19 @@ Return ONLY valid JSON with this exact structure:
   }
 
   async generateWebsiteSpec(blueprint: BlueprintResult): Promise<WebsiteSpecResult> {
-    const industry = blueprint.industry || "technology";
-    const systemPrompt = `You are a senior startup copywriter and website strategist. Given a startup blueprint, generate a premium SaaS website specification.
-
-CRITICAL: Return ONLY valid JSON. No markdown, no explanation. No code fences.
-
-CONSTRAINTS — NEVER fabricate:
-- NO fake testimonials, team members, statistics, customer logos, reviews, or company claims
-- NO fake addresses, phone numbers, email addresses, or social media handles
-- NO fake legal information (privacy policy terms, etc.)
-- Only include sections that can be populated truthfully from the blueprint data
-- Skip testimonials, team, stats, logo-cloud sections entirely — they require fabricated data
-- If you lack real data for a field, leave it empty or omit the section
-
-REQUIRED PAGE: Home ("/") with these sections in this order:
-
-1. hero — content includes:
-   - headline: A specific, benefit-driven headline (e.g. "Ship API integrations 10x faster" not "Revolutionary Integration Platform")
-   - subheadline: Clear value proposition expanding on the headline
-   - ctaText: Action-oriented primary CTA (e.g. "Start Building Free")
-   - ctaSecondary: Lower-friction secondary CTA (e.g. "See How It Works")
-
-2. problem (or "pain") — content includes:
-   - headline: Framing of the problem (e.g. "Building integrations is still painfully manual")
-   - description: Specific pain description from the blueprint's problemStatement
-   - painPoints: Array of 3-4 specific pain points derived from the blueprint
-
-3. solution (or "benefits") — content includes:
-   - headline: How the product solves the problem
-   - description: Solution from blueprint.solution
-   - benefits: Array of 3-4 specific benefits from the solution
-
-4. features — content includes:
-   - title: Section heading (e.g. "Everything you need to ship integrations")
-   - subtitle: Optional supporting text
-   - items: Array of feature objects, each with "title" and "description" (NOT plain strings). Derive from blueprint.keyFeatures. Make descriptions concrete and specific.
-
-5. pricing — content includes:
-   - headline: "Simple, transparent pricing" (or similar)
-   - subtitle: Description of the real monetization model from blueprint.monetization
-   - plans: Array of 2-3 plan objects with:
-     - name: Plan name (e.g. "Starter", "Pro", "Enterprise")
-     - price: Dollar amount string (e.g. "$29")
-     - period: "month" (omit for enterprise)
-     - description: One-line description
-     - features: Array of 4-6 specific features
-     - highlighted: true for the recommended tier (exactly 1 plan)
-
-6. faq — content includes:
-   - subtitle: Optional supporting text
-   - items: Array of 3-5 objects with "question" and "answer". Write real questions a potential customer would ask about this specific product category. Not generic industry questions.
-
-7. cta — content includes:
-   - headline: A compelling final CTA headline referencing the company name
-   - subheadline: Brief supporting message
-   - ctaText: Final action button text (e.g. "Get Started Free")
-
-OPTIONAL: social-proof — content includes:
-   - headline: "Trusted by teams building ..."
-   - items: Array of 3-5 placeholder company names (generic like "Company A", "Startup X") — these are clearly placeholders, not real logos
-
-OPTIONAL: 1 additional page (About, How It Works, or Features deep-dive):
-- Must derive ALL content from blueprint data
-- Do not create pages with fabricated or empty content
-
-COPYWRITING RULES:
-- Headlines must be specific to what this startup does. Compare:
-  BAD: "Revolutionary Platform for Modern Teams"
-  GOOD: "Automate your customer data pipelines in minutes"
-- Use concrete language from blueprint.keyFeatures and blueprint.solution
-- Focus on customer outcomes, not product features
-- Use the startup's target audience to inform tone and messaging
-- Avoid: "revolutionary", "game-changing", "best-in-class", "cutting-edge", "next-generation", "industry-leading"
-- Every word should pass the "so what?" test — does it tell the user why they should care?
-
-COLOR GUIDANCE for ${industry}:
-
-| Industry | Primary | Secondary | Why |
-|---|---|---|---|
-| Fintech/Finance | #0F766E | #14B8A6 | Trustworthy teal |
-| Healthcare | #059669 | #10B981 | Calming green |
-| DevTools/SaaS | #2563EB | #7C3AED | Bold blue-purple |
-| AI/ML | #7C3AED | #2563EB | Creative purple-blue |
-| E-commerce | #E11D48 | #BE185D | Energetic red |
-| Education | #7C3AED | #8B5CF6 | Approachable purple |
-| Security | #1E293B | #475569 | Strong dark |
-| Enterprise | #4F46E5 | #6366F1 | Trustworthy indigo |
-| Creative | #EC4899 | #F43F5E | Vibrant pink |
-| Other | #2563EB | #7C3AED | Versatile blue |
-
-Font: "Inter", borderRadius: "12px"
-
-Return ONLY valid JSON with this exact structure:
-{
-  "pages": [
-    {
-      "name": "Home",
-      "slug": "/",
-      "sections": [
-        { "type": "hero", "order": 1, "content": { "headline": "headline here", "subheadline": "subheadline here", "ctaText": "Primary CTA", "ctaSecondary": "Secondary CTA" } },
-        { "type": "problem", "order": 2, "content": { "headline": "problem headline", "description": "problem description", "painPoints": ["pain 1", "pain 2", "pain 3"] } },
-        { "type": "solution", "order": 3, "content": { "headline": "solution headline", "description": "solution description", "benefits": ["benefit 1", "benefit 2", "benefit 3"] } },
-        { "type": "features", "order": 4, "content": { "title": "Features heading", "subtitle": "supporting text", "items": [{ "title": "Feature", "description": "Description" }] } },
-        { "type": "pricing", "order": 5, "content": { "headline": "Pricing heading", "subtitle": "monetization description", "plans": [{ "name": "Starter", "price": "$0", "period": "month", "description": "desc", "features": ["f1", "f2"], "highlighted": false }] } },
-        { "type": "faq", "order": 6, "content": { "subtitle": "", "items": [{ "question": "Q?", "answer": "A!" }] } },
-        { "type": "cta", "order": 7, "content": { "headline": "CTA headline", "subheadline": "CTA subheadline", "ctaText": "Get Started" } }
-      ]
-    }
-  ],
-  "theme": {
-    "primaryColor": "#2563EB",
-    "secondaryColor": "#7C3AED",
-    "fontFamily": "Inter",
-    "borderRadius": "12px"
-  },
-  "components": [
-    { "name": "Navbar", "type": "navigation", "props": {} },
-    { "name": "Footer", "type": "footer", "props": {} }
-  ]
-}
-
-REMEMBER: Use the ACTUAL blueprint data. Never fabricate testimonials, team members, statistics, or company claims. Write specific, customer-focused copy.`;
-
+    const prompt = buildMinimalWebsitePrompt(blueprint);
     const raw = await this.callAPI(
       this.endpoint,
       env.FREELLM_API_KEY!,
       "gpt-4o-mini",
       [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: JSON.stringify(blueprint) },
+        { role: "system", content: "Return ONLY valid JSON matching the schema below. No markdown, no explanation." },
+        { role: "user", content: prompt },
       ],
-      8192,
-      0.3,
-      WEBSITE_TIMEOUT_MS,
+      800,
     );
-
-    return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
+    const minimal = this.validateMinimalContent(raw);
+    return enrichMinimalToFullSpec(minimal, blueprint);
   }
 
   async generateWebsitePage(
@@ -465,17 +512,18 @@ Return ONLY valid JSON with this exact structure:
   "competitorAnalysis": [...],
   "roadmap": [...],
   "brand": {
-    "mission": "Mission statement (1-2 sentences)",
-    "values": ["value1", "value2", "value3"],
-    "tone": ["professional", "innovative"],
+    "mission": "Inspiring mission statement aligned with the startup's purpose",
+    "values": ["Value1", "Value2", "Value3", "Value4"],
+    "tone": ["Professional", "Approachable", "Confident", "Clear"],
     "colors": [
-      { "name": "Primary", "hex": "#2563EB" },
-      { "name": "Secondary", "hex": "#7C3AED" },
-      { "name": "Accent", "hex": "#10B981" }
+      { "name": "Primary", "hex": "#HEXCOLOR" },
+      { "name": "Secondary", "hex": "#HEXCOLOR" },
+      { "name": "Accent", "hex": "#HEXCOLOR" },
+      { "name": "Neutral", "hex": "#HEXCOLOR" }
     ],
     "typography": {
-      "heading": "Inter",
-      "body": "Inter"
+      "heading": "Font name for headings",
+      "body": "Font name for body text"
     }
   }
 }`;
@@ -496,60 +544,19 @@ Return ONLY valid JSON with this exact structure:
   }
 
   async generateWebsiteSpec(blueprint: BlueprintResult): Promise<WebsiteSpecResult> {
-    const industry = blueprint.industry || "technology";
-    const systemPrompt = `You are a senior startup copywriter and website strategist. Given a startup blueprint, generate a premium SaaS website specification.
-
-CRITICAL: Return ONLY valid JSON. No markdown, no explanation. No code fences.
-
-CONSTRAINTS — NEVER fabricate:
-- NO fake testimonials, team members, statistics, customer logos, reviews, or company claims
-- NO fake addresses, phone numbers, email addresses, or social media handles
-- Skip testimonials, team, stats, logo-cloud sections entirely
-- Only include sections truthfully derivable from the blueprint data
-
-REQUIRED HOME PAGE sections in order:
-
-1. hero — content: headline (benefit-driven, specific, e.g. "Ship API integrations 10x faster"), subheadline, ctaText, ctaSecondary
-
-2. problem — content: headline, description (from problemStatement), painPoints: string[] (3-4 items)
-
-3. solution — content: headline, description (from solution), benefits: string[] (3-4 items)
-
-4. features — content: title, subtitle, items: Array of {title: string, description: string} (NOT plain strings). Derive from keyFeatures with concrete descriptions.
-
-5. pricing — content: headline, subtitle (from monetization), plans: Array of {name, price, period, description, features: string[], highlighted: boolean}
-
-6. faq — content: subtitle, items: Array of {question, answer} (3-5 items, real customer questions about this product category)
-
-7. cta — content: headline (includes company name), subheadline, ctaText
-
-OPTIONAL: social-proof — content: headline, items: string[] (generic placeholder company names)
-
-COPYWRITING RULES:
-- BAD: "Revolutionary Platform for Modern Teams"  GOOD: "Automate your customer data pipelines in minutes"
-- Use concrete language from blueprint.keyFeatures and blueprint.solution
-- Focus on customer outcomes. Avoid: "revolutionary", "game-changing", "best-in-class", "cutting-edge"
-- Every word should pass the "so what?" test
-
-COLORS: Use industry-appropriate colors. Font: "Inter", borderRadius: "12px"
-- ${industry}: Primary #2563EB, Secondary #7C3AED (or industry-specific alternatives)
-
-Return ONLY valid JSON with the exact structure shown. Use the ACTUAL blueprint data.`;
-
+    const prompt = buildMinimalWebsitePrompt(blueprint);
     const raw = await this.callAPI(
       this.endpoint,
       this._apiKey,
       "llama-3.3-70b-versatile",
       [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: JSON.stringify(blueprint) },
+        { role: "system", content: "Return ONLY valid JSON matching the schema below. No markdown, no explanation." },
+        { role: "user", content: prompt },
       ],
-      8192,
-      0.3,
-      WEBSITE_TIMEOUT_MS,
+      800,
     );
-
-    return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
+    const minimal = this.validateMinimalContent(raw);
+    return enrichMinimalToFullSpec(minimal, blueprint);
   }
 
   async generateWebsitePage(
@@ -600,17 +607,18 @@ Return ONLY valid JSON with this exact structure:
   "competitorAnalysis": [...],
   "roadmap": [...],
   "brand": {
-    "mission": "Mission statement (1-2 sentences)",
-    "values": ["value1", "value2", "value3"],
-    "tone": ["professional", "innovative"],
+    "mission": "Inspiring mission statement aligned with the startup's purpose",
+    "values": ["Value1", "Value2", "Value3", "Value4"],
+    "tone": ["Professional", "Approachable", "Confident", "Clear"],
     "colors": [
-      { "name": "Primary", "hex": "#2563EB" },
-      { "name": "Secondary", "hex": "#7C3AED" },
-      { "name": "Accent", "hex": "#10B981" }
+      { "name": "Primary", "hex": "#HEXCOLOR" },
+      { "name": "Secondary", "hex": "#HEXCOLOR" },
+      { "name": "Accent", "hex": "#HEXCOLOR" },
+      { "name": "Neutral", "hex": "#HEXCOLOR" }
     ],
     "typography": {
-      "heading": "Inter",
-      "body": "Inter"
+      "heading": "Font name for headings",
+      "body": "Font name for body text"
     }
   }
 }`;
@@ -623,7 +631,6 @@ Return ONLY valid JSON with this exact structure:
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt },
       ],
-      1024,
     );
 
     logger.debug({ provider: this.name, rawLength: raw.length }, "Raw response from OpenRouter");
@@ -632,25 +639,19 @@ Return ONLY valid JSON with this exact structure:
   }
 
   async generateWebsiteSpec(blueprint: BlueprintResult): Promise<WebsiteSpecResult> {
-    const industry = blueprint.industry || "technology";
+    const prompt = buildMinimalWebsitePrompt(blueprint);
     const raw = await this.callAPI(
       this.endpoint,
       this._apiKey,
       "openai/gpt-4o",
       [
-        { role: "system", content: `You are a senior startup copywriter and website strategist. Given a startup blueprint, generate a premium SaaS website specification. CRITICAL: Return ONLY valid JSON. NEVER fabricate testimonials, team members, stats, logos, addresses, phone numbers, or company claims. Only include sections truthfully derivable from the blueprint data.
-
-REQUIRED Home page sections: hero (headline=benefit-driven specific headline, subheadline, ctaText, ctaSecondary), problem (headline, description, painPoints string[]), solution (headline, description, benefits string[]), features (title, subtitle, items=[{title, description}]), pricing (headline, subtitle, plans=[{name,price,period,description,features,highlighted}]), faq (subtitle, items=[{question,answer}]), cta (headline, subheadline, ctaText). Optional: social-proof (headline, items string[]).
-
-COPYWRITING: Specific customer-focused copy. BAD: "Revolutionary platform" GOOD: "Automate X in minutes". Use blueprint data. Avoid revolutionary/game-changing/best-in-class. Font: Inter, borderRadius: 12px. Industry: ${industry}. Return ONLY valid JSON with pages array, theme (primaryColor, secondaryColor), and components array.` },
-        { role: "user", content: JSON.stringify(blueprint) },
+        { role: "system", content: "Return ONLY valid JSON matching the schema below. No markdown, no explanation." },
+        { role: "user", content: prompt },
       ],
-      8192,
-      0.3,
-      WEBSITE_TIMEOUT_MS,
+      800,
     );
-
-    return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
+    const minimal = this.validateMinimalContent(raw);
+    return enrichMinimalToFullSpec(minimal, blueprint);
   }
 
   async generateWebsitePage(
@@ -701,17 +702,18 @@ Return ONLY valid JSON with this exact structure:
   "competitorAnalysis": [...],
   "roadmap": [...],
   "brand": {
-    "mission": "Mission statement (1-2 sentences)",
-    "values": ["value1", "value2", "value3"],
-    "tone": ["professional", "innovative"],
+    "mission": "Inspiring mission statement aligned with the startup's purpose",
+    "values": ["Value1", "Value2", "Value3", "Value4"],
+    "tone": ["Professional", "Approachable", "Confident", "Clear"],
     "colors": [
-      { "name": "Primary", "hex": "#2563EB" },
-      { "name": "Secondary", "hex": "#7C3AED" },
-      { "name": "Accent", "hex": "#10B981" }
+      { "name": "Primary", "hex": "#HEXCOLOR" },
+      { "name": "Secondary", "hex": "#HEXCOLOR" },
+      { "name": "Accent", "hex": "#HEXCOLOR" },
+      { "name": "Neutral", "hex": "#HEXCOLOR" }
     ],
     "typography": {
-      "heading": "Inter",
-      "body": "Inter"
+      "heading": "Font name for headings",
+      "body": "Font name for body text"
     }
   }
 }`;
@@ -731,36 +733,19 @@ Return ONLY valid JSON with this exact structure:
   }
 
   async generateWebsiteSpec(blueprint: BlueprintResult): Promise<WebsiteSpecResult> {
-    const industry = blueprint.industry || "technology";
-    const systemPrompt = `You are a senior startup copywriter and website strategist. Given a startup blueprint, generate a premium SaaS website specification.
-CRITICAL: Return ONLY valid JSON. No markdown, no explanation. No code fences.
-NEVER fabricate testimonials, team members, stats, addresses, or company claims.
-Only include sections truthfully derivable from the blueprint data.
-REQUIRED Home page sections in order:
-1. hero - content: headline (benefit-driven, specific), subheadline, ctaText, ctaSecondary
-2. problem - content: headline, description, painPoints string[]
-3. solution - content: headline, description, benefits string[]
-4. features - content: title, subtitle, items: Array of {title, description}
-5. pricing - content: headline, subtitle, plans: Array of {name, price, period, description, features, highlighted}
-6. faq - content: subtitle, items: Array of {question, answer}
-7. cta - content: headline, subheadline, ctaText
-COPYWRITING: Specific customer-focused copy. Use blueprint data. Font: Inter, borderRadius: 12px. Industry: ${industry}.
-Return ONLY valid JSON with pages array, theme (primaryColor, secondaryColor), and components array.`;
-
+    const prompt = buildMinimalWebsitePrompt(blueprint);
     const raw = await this.callAPI(
       this.endpoint,
       this._apiKey,
       "gemini-2.0-flash",
       [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: JSON.stringify(blueprint) },
+        { role: "system", content: "Return ONLY valid JSON matching the schema below. No markdown, no explanation." },
+        { role: "user", content: prompt },
       ],
-      8192,
-      0.3,
-      WEBSITE_TIMEOUT_MS,
+      800,
     );
-
-    return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
+    const minimal = this.validateMinimalContent(raw);
+    return enrichMinimalToFullSpec(minimal, blueprint);
   }
 
   async generateWebsitePage(
@@ -813,17 +798,18 @@ Return ONLY valid JSON with this exact structure:
   "competitorAnalysis": [...],
   "roadmap": [...],
   "brand": {
-    "mission": "Mission statement (1-2 sentences)",
-    "values": ["value1", "value2", "value3"],
-    "tone": ["professional", "innovative"],
+    "mission": "Inspiring mission statement aligned with the startup's purpose",
+    "values": ["Value1", "Value2", "Value3", "Value4"],
+    "tone": ["Professional", "Approachable", "Confident", "Clear"],
     "colors": [
-      { "name": "Primary", "hex": "#2563EB" },
-      { "name": "Secondary", "hex": "#7C3AED" },
-      { "name": "Accent", "hex": "#10B981" }
+      { "name": "Primary", "hex": "#HEXCOLOR" },
+      { "name": "Secondary", "hex": "#HEXCOLOR" },
+      { "name": "Accent", "hex": "#HEXCOLOR" },
+      { "name": "Neutral", "hex": "#HEXCOLOR" }
     ],
     "typography": {
-      "heading": "Inter",
-      "body": "Inter"
+      "heading": "Font name for headings",
+      "body": "Font name for body text"
     }
   }
 }`;
@@ -843,36 +829,19 @@ Return ONLY valid JSON with this exact structure:
   }
 
   async generateWebsiteSpec(blueprint: BlueprintResult): Promise<WebsiteSpecResult> {
-    const industry = blueprint.industry || "technology";
-    const systemPrompt = `You are a senior startup copywriter and website strategist. Given a startup blueprint, generate a premium SaaS website specification.
-CRITICAL: Return ONLY valid JSON. No markdown, no explanation. No code fences.
-NEVER fabricate testimonials, team members, stats, addresses, or company claims.
-Only include sections truthfully derivable from the blueprint data.
-REQUIRED Home page sections in order:
-1. hero - content: headline (benefit-driven, specific), subheadline, ctaText, ctaSecondary
-2. problem - content: headline, description, painPoints string[]
-3. solution - content: headline, description, benefits string[]
-4. features - content: title, subtitle, items: Array of {title, description}
-5. pricing - content: headline, subtitle, plans: Array of {name, price, period, description, features, highlighted}
-6. faq - content: subtitle, items: Array of {question, answer}
-7. cta - content: headline, subheadline, ctaText
-COPYWRITING: Specific customer-focused copy. Use blueprint data. Font: Inter, borderRadius: 12px. Industry: ${industry}.
-Return ONLY valid JSON with pages array, theme (primaryColor, secondaryColor), and components array.`;
-
+    const prompt = buildMinimalWebsitePrompt(blueprint);
     const raw = await this.callAPI(
       this.endpoint,
       this._apiKey,
       this._model,
       [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: JSON.stringify(blueprint) },
+        { role: "system", content: "Return ONLY valid JSON matching the schema below. No markdown, no explanation." },
+        { role: "user", content: prompt },
       ],
-      8192,
-      0.3,
-      WEBSITE_TIMEOUT_MS,
+      800,
     );
-
-    return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
+    const minimal = this.validateMinimalContent(raw);
+    return enrichMinimalToFullSpec(minimal, blueprint);
   }
 
   async generateWebsitePage(
@@ -971,7 +940,7 @@ async function tryProvider<T>(
 ): Promise<{ result: T; providerName: string }> {
   const start = Date.now();
 
-  const entry = providerRegistry["entries"]?.get(providerId) as { model?: string } | undefined;
+  const entry = providerRegistry.getEntry(providerId);
   const modelName = entry?.model ?? "unknown";
 
   logger.info(
@@ -1025,11 +994,16 @@ async function withFailover<T>(
   const errors: Array<{ provider: string; model: string; error: string; statusCode: number }> = [];
   const availableCount = providerRegistry.getEntryCount();
   const hasFreeLLM = !!env.FREELLM_API_KEY;
+  const totalTimeout = env.AI_FAILOVER_TOTAL_TIMEOUT_MS;
+  const overallStart = Date.now();
 
   logger.info(
-    { availableProviders: availableCount, hasFreeLLM, context },
+    { availableProviders: availableCount, hasFreeLLM, context, totalTimeout },
     "AI provider: starting fallback chain",
   );
+
+  function elapsed() { return Date.now() - overallStart; }
+  function timeRemaining() { return Math.max(0, totalTimeout - elapsed()); }
 
   if (hasFreeLLM) {
     const provider = new FreeLLMProvider();
@@ -1037,7 +1011,7 @@ async function withFailover<T>(
     try {
       logger.info({ provider: "FreeLLMAPI", model: "gpt-4o-mini" }, "AI provider: attempting FreeLLMAPI");
       const { result } = await tryProvider("freellm", provider, action);
-      logger.info({ provider: "FreeLLMAPI" }, "AI provider: FreeLLMAPI succeeded");
+      logger.info({ provider: "FreeLLMAPI", model: "gpt-4o-mini" }, "[Blueprint] FreeLLMAPI succeeded");
       return result;
     } catch (error) {
       logger.error({ provider: "freellm", error, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, "[AI] provider failed");
@@ -1058,6 +1032,11 @@ async function withFailover<T>(
   const maxAttempts = availableCount + 1;
 
   while (attemptCount < maxAttempts) {
+    if (timeRemaining() <= 0) {
+      logger.warn({ elapsedMs: elapsed(), totalTimeout }, "AI provider: total timeout reached, skipping remaining providers");
+      break;
+    }
+
     const entry = providerRegistry.getNextAvailableProvider();
     if (!entry) break;
 
@@ -1067,7 +1046,7 @@ async function withFailover<T>(
     try {
       logger.info({ provider: entry.provider, model: entry.model, id: entry.id, attempt: attemptCount, total: availableCount }, "AI provider: attempting");
       const { result } = await tryProvider(entry.id, provider, action);
-      logger.info({ provider: entry.provider, model: entry.model }, "AI provider: succeeded");
+      logger.info({ provider: entry.provider, model: entry.model, id: entry.id, attempt: attemptCount }, "[Blueprint] Provider succeeded");
       return result;
     } catch (error) {
       logger.error({ provider: entry.id, error, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, "[AI] provider failed");
@@ -1083,7 +1062,7 @@ async function withFailover<T>(
 
       const remaining = availableCount - attemptCount + (hasFreeLLM ? 0 : 0);
       logger.warn(
-        { provider: entry.provider, model: entry.model, id: entry.id, remainingProviders: remaining, error: message },
+        { provider: entry.provider, model: entry.model, id: entry.id, remainingProviders: remaining, error: message, elapsedMs: elapsed() },
         "AI provider: failed — trying next",
       );
     }
@@ -1091,24 +1070,65 @@ async function withFailover<T>(
 
   const detail = errors.map((e) => `${e.provider} (${e.model}): [${e.statusCode}] ${e.error}`).join(" | ");
   const prefix = context ? `${context}: ` : "";
-  const fullError = `${prefix}All AI providers failed (tried ${errors.length} providers): ${detail}`;
+  const fullError = `${prefix}All AI providers failed after ${elapsed()}ms (tried ${errors.length} providers): ${detail}`;
   logger.error({ errors: errors.map(e => ({ provider: e.provider, model: e.model, statusCode: e.statusCode, error: e.error })) }, fullError);
   throw new Error(fullError);
 }
 
-export async function generateBlueprintWithFallback(prompt: string): Promise<BlueprintResult> {
+function buildFallbackBlueprint(name: string, description?: string): BlueprintResult {
+  const industry = "Technology";
+  const featureList: string[] = [];
+
+  return {
+    name,
+    description: description || `${name} - A modern technology startup.`,
+    industry,
+    targetAudience: "Early adopters and professionals seeking innovative solutions",
+    problemStatement: `Customers need better solutions in this space, and existing options don't fully address their needs.`,
+    solution: `${name} provides a modern, efficient solution that leverages technology to solve these challenges.`,
+    keyFeatures: featureList,
+    techStack: ["Modern web technologies", "Cloud infrastructure", "API-first architecture"],
+    monetization: "Subscription-based pricing with tiered plans",
+    competitorAnalysis: ["Traditional incumbents", "Emerging startups in the space"],
+    roadmap: ["Launch MVP", "Gather user feedback", "Scale infrastructure", "Expand feature set"],
+  };
+}
+
+export async function generateBlueprintWithFallback(
+  prompt: string,
+  startupName?: string,
+  startupDescription?: string,
+): Promise<BlueprintResult> {
   const availableCount = providerRegistry.getEntryCount();
   const hasFreeLLM = !!env.FREELLM_API_KEY;
   logger.info(
     { promptLength: prompt.length, availableProviders: availableCount, hasFreeLLM },
-    "generateBlueprintWithFallback: starting",
+    "[Blueprint] generateBlueprintWithFallback: starting",
   );
   if (availableCount === 0 && !hasFreeLLM) {
-    const error = "No AI provider configured. Set GOOGLE_API_KEY_1, GROQ_API_KEY, NIM_API_KEY_1, OPENROUTER_API_KEY, or FREELLM_API_KEY.";
-    logger.error({ availableProviders: 0, hasFreeLLM: false }, error);
-    throw new Error("No AI provider configured");
+    logger.warn(
+      { availableProviders: 0, hasFreeLLM: false },
+      "[Blueprint] No AI provider configured, building fallback blueprint",
+    );
+    return buildFallbackBlueprint(startupName || prompt, startupDescription);
   }
-  return withFailover((p) => p.generateBlueprint(prompt), "");
+  const totalStart = Date.now();
+  try {
+    const result = await withFailover((p) => p.generateBlueprint(prompt), "generateBlueprint");
+    const totalDuration = Date.now() - totalStart;
+    logger.info(
+      { success: true, totalDurationMs: totalDuration, name: result.name, industry: result.industry },
+      "[Blueprint] generateBlueprintWithFallback: succeeded",
+    );
+    return result;
+  } catch (error) {
+    const totalDuration = Date.now() - totalStart;
+    logger.warn(
+      { success: false, totalDurationMs: totalDuration, error: error instanceof Error ? error.message : String(error) },
+      "[Blueprint] generateBlueprintWithFallback: all providers failed, building fallback blueprint",
+    );
+    return buildFallbackBlueprint(startupName || prompt, startupDescription);
+  }
 }
 
 function buildFallbackWebsiteSpec(blueprint: BlueprintResult): WebsiteSpecResult {

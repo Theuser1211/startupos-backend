@@ -5,6 +5,7 @@ import { AppError, NotFoundError, ForbiddenError } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
 import { captureEvent } from "../dashboard/dashboard.service.js";
 import { generateBlueprintWithFallback } from "../../services/ai/provider.js";
+import { env } from "../../lib/env.js";
 
 export async function generateBlueprintHandler(
   request: FastifyRequest<{ Body: GenerateBlueprintInput }>,
@@ -15,62 +16,65 @@ export async function generateBlueprintHandler(
   const userId = request.user!.userId;
 
   try {
-    logger.info({ requestId, startupId, userId, promptLength: prompt?.length }, "[BP] request received");
+    logger.info({ requestId, startupId, userId, promptLength: prompt?.length }, "[Blueprint] Request received");
 
-    logger.info({ requestId, userId }, "[BP] user authenticated");
+    logger.info({ requestId, userId }, "[Blueprint] User authenticated");
 
-    logger.info({ requestId, startupId }, "[BP] startup lookup start");
+    logger.info({ requestId, startupId }, "[Blueprint] Startup lookup start");
     const startup = await prisma.startup.findUnique({
       where: { id: startupId },
-      select: { userId: true, description: true },
+      select: { userId: true, name: true, description: true },
     });
-    logger.info({ requestId, startupId, found: !!startup }, "[BP] startup lookup done");
+    logger.info({ requestId, startupId, found: !!startup }, "[Blueprint] Startup lookup done");
 
     if (!startup) {
-      logger.warn({ requestId, startupId }, "[BP] startup not found");
+      logger.warn({ requestId, startupId }, "[Blueprint] Startup not found");
       throw new NotFoundError("Startup");
     }
 
     const effectivePrompt = prompt ?? startup.description ?? "";
     if (!effectivePrompt || effectivePrompt.length < 10) {
-      logger.warn({ requestId, startupId }, "[BP] prompt missing or too short");
+      logger.warn({ requestId, startupId, promptLength: effectivePrompt.length }, "[Blueprint] Prompt missing or too short");
       throw new Error("Prompt is required (provide in request or set startup description)");
     }
 
-    logger.info({ requestId, startupId, ownerMatch: startup.userId === userId }, "[BP] ownership check passed");
+    logger.info({ requestId, startupId, ownerMatch: startup.userId === userId }, "[Blueprint] Ownership check passed");
     if (startup.userId !== userId) {
-      logger.warn({ requestId, startupId, userId }, "[BP] ownership check failed");
+      logger.warn({ requestId, startupId, userId }, "[Blueprint] Ownership check failed");
       throw new ForbiddenError("You do not own this startup");
     }
 
-    logger.info({ requestId, startupId }, "[BP] existing blueprint lookup start");
+    logger.info({ requestId, startupId }, "[Blueprint] Existing blueprint lookup start");
     const existingBlueprint = await prisma.blueprint.findUnique({
       where: { startupId },
     });
-    logger.info({ requestId, startupId, exists: !!existingBlueprint }, "[BP] existing blueprint lookup done");
+    logger.info({ requestId, startupId, exists: !!existingBlueprint }, "[Blueprint] Existing blueprint lookup done");
 
     if (existingBlueprint) {
-      logger.info({ requestId, startupId }, "[BP] returning existing blueprint");
+      logger.info({ requestId, startupId }, "[Blueprint] Returning existing blueprint");
       await captureEvent(startupId, "BLUEPRINT_GENERATED", { existing: true });
       reply.send({ blueprint: existingBlueprint });
       return;
     }
 
-    logger.info({ requestId, startupId, promptLength: effectivePrompt.length }, "[BP] AI provider call start");
-    const blueprintContent = await generateBlueprintWithFallback(effectivePrompt);
-    logger.info({ requestId, startupId, name: blueprintContent.name }, "[BP] AI provider call succeeded");
+    logger.info({ requestId, startupId, promptLength: effectivePrompt.length, timeoutMs: env.AI_TIMEOUT_MS }, "[Blueprint] AI call start");
+    const blueprintContent = await generateBlueprintWithFallback(effectivePrompt, startup.name, startup.description || undefined);
+    logger.info({ requestId, startupId, name: blueprintContent.name, industry: blueprintContent.industry, featureCount: blueprintContent.keyFeatures?.length }, "[Blueprint] AI call completed");
 
-    logger.info({ requestId, startupId }, "[BP] blueprint persistence start");
+    logger.info({ requestId, startupId }, "[Blueprint] Parse succeeded");
+
+    logger.info({ requestId, startupId }, "[Blueprint] Persistence start");
     const blueprint = await prisma.blueprint.create({
       data: {
         startupId,
         content: blueprintContent as unknown as object,
       },
     });
-    logger.info({ requestId, startupId, blueprintId: blueprint.id }, "[BP] blueprint persistence succeeded");
+    logger.info({ requestId, startupId, blueprintId: blueprint.id }, "[Blueprint] Persistence succeeded");
 
     await captureEvent(startupId, "BLUEPRINT_GENERATED", { blueprintId: blueprint.id });
 
+    logger.info({ requestId, startupId, blueprintId: blueprint.id }, "[Blueprint] Response sent");
     reply.send({ blueprint });
   } catch (error: unknown) {
     logger.error(
@@ -81,7 +85,7 @@ export async function generateBlueprintHandler(
         startupId,
         userId,
       },
-      "[BP-FATAL]",
+      "[Blueprint-FATAL]",
     );
     throw error;
   }

@@ -186,6 +186,10 @@ export class ProviderRegistry {
   getEntryCount(): number {
     return this.entries.size;
   }
+
+  getEntry(id: string): ProviderRegistration | undefined {
+    return this.entries.get(id);
+  }
 }
 
 export const providerRegistry = new ProviderRegistry();

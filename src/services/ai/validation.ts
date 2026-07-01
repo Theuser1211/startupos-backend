@@ -136,6 +136,18 @@ export const WebsiteResultSchema = z.object({
   js: z.string().default(""),
 });
 
+export const MinimalWebsiteContentSchema = z.object({
+  headline: z.string().min(3, "headline must be at least 3 characters").max(120),
+  subheadline: z.string().min(3).max(200),
+  about: z.string().min(10).max(500),
+  features: z.array(z.string().min(3).max(120)).min(3).max(6),
+  ctaText: z.string().min(2).max(60),
+  primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "primaryColor must be a hex color"),
+  tone: z.string().min(2).max(30),
+});
+
+export type MinimalWebsiteContent = z.infer<typeof MinimalWebsiteContentSchema>;
+
 export type ValidatedBlueprint = z.infer<typeof BlueprintResultSchema>;
 export type ValidatedWebsiteSpec = z.infer<typeof WebsiteSpecResultSchema>;
 export type ValidatedPageHTML = z.infer<typeof PageHTMLResultSchema>;

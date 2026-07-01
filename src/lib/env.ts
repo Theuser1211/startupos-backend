@@ -43,6 +43,7 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 
   AI_TIMEOUT_MS: z.coerce.number().default(60000),
+  AI_FAILOVER_TOTAL_TIMEOUT_MS: z.coerce.number().default(60000),
   WEBSITE_AI_TIMEOUT_MS: z.coerce.number().default(90000),
   JOB_TIMEOUT_MS: z.coerce.number().default(600000),
   JOB_MONITOR_INTERVAL_MS: z.coerce.number().default(30000),
