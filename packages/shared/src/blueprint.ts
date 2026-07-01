@@ -1,3 +1,11 @@
+export interface BrandIdentity {
+  mission: string;
+  values: string[];
+  tone: string[];
+  colors: Array<{ name: string; hex: string }>;
+  typography: { heading: string; body: string };
+}
+
 export interface BlueprintContent {
   name: string;
   description: string;
@@ -10,6 +18,7 @@ export interface BlueprintContent {
   monetization: string;
   competitorAnalysis: string[];
   roadmap: string[];
+  brand?: BrandIdentity;
 }
 
 export type BlueprintResult = BlueprintContent;

@@ -14,6 +14,7 @@ export type {
 } from "./startup";
 
 export type {
+  BrandIdentity,
   BlueprintContent,
   BlueprintResult,
   GenerateBlueprintPayload,
