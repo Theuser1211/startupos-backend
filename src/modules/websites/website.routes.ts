@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { generateWebsiteHandler, getWebsiteByStartupHandler, getWebsiteHandler } from "./website.handler.js";
+import { generateWebsiteHandler, getWebsiteHandler, getWebsiteByStartupHandler } from "./website.handler.js";
 import { authenticate } from "../../middleware/auth.js";
 
 const websiteResponse = {
@@ -12,8 +12,8 @@ const websiteResponse = {
     createdAt: { type: "string", format: "date-time" },
     updatedAt: { type: "string", format: "date-time" },
     startupId: { type: "string" },
-    spec: { type: ["object", "null"] },
-    deployment: { type: ["object", "null"] },
+    spec: { type: ["object", "null"], additionalProperties: true },
+    deployment: { type: ["object", "null"], additionalProperties: true },
   },
 };
 
@@ -82,10 +82,7 @@ export async function websiteRoutes(app: FastifyInstance): Promise<void> {
         200: {
           type: "object",
           properties: {
-            website: {
-              type: ["object", "null"],
-              nullable: true,
-            },
+            website: websiteResponse,
           },
         },
       },
