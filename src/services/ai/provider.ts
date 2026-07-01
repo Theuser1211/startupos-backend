@@ -22,6 +22,7 @@ import { ZodError } from "zod";
 import { providerRegistry } from "./provider-registry.js";
 
 const TIMEOUT_MS = env.AI_TIMEOUT_MS;
+const WEBSITE_TIMEOUT_MS = env.WEBSITE_AI_TIMEOUT_MS;
 
 export abstract class BaseAIProvider implements AIProvider {
   abstract name: string;
@@ -41,11 +42,13 @@ export abstract class BaseAIProvider implements AIProvider {
     messages: Array<{ role: string; content: string }>,
     maxTokens = 8192,
     temperature = 0.3,
+    timeoutMs?: number,
   ): Promise<string> {
+    const effectiveTimeout = timeoutMs ?? TIMEOUT_MS;
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
-    }, TIMEOUT_MS);
+    }, effectiveTimeout);
 
     try {
       logger.info({ provider: this.name, url: endpoint, model }, "[AI] sending request");
@@ -87,7 +90,7 @@ export abstract class BaseAIProvider implements AIProvider {
       logger.error({ provider: this.name, error, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, "[AI] provider failed");
       if (error instanceof AIProviderError) throw error;
       if (error instanceof Error && error.name === "AbortError") {
-        throw new AIProviderError(this.name, 0, `Request timed out after ${TIMEOUT_MS}ms`);
+        throw new AIProviderError(this.name, 0, `Request timed out after ${effectiveTimeout}ms`);
       }
       throw new AIProviderError(this.name, 0, `Network error: ${error instanceof Error ? error.message : "Unknown"}`);
     } finally {
@@ -406,6 +409,9 @@ REMEMBER: Use the ACTUAL blueprint data. Never fabricate testimonials, team memb
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify(blueprint) },
       ],
+      8192,
+      0.3,
+      WEBSITE_TIMEOUT_MS,
     );
 
     return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
@@ -538,6 +544,9 @@ Return ONLY valid JSON with the exact structure shown. Use the ACTUAL blueprint 
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify(blueprint) },
       ],
+      8192,
+      0.3,
+      WEBSITE_TIMEOUT_MS,
     );
 
     return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
@@ -636,6 +645,9 @@ REQUIRED Home page sections: hero (headline=benefit-driven specific headline, su
 COPYWRITING: Specific customer-focused copy. BAD: "Revolutionary platform" GOOD: "Automate X in minutes". Use blueprint data. Avoid revolutionary/game-changing/best-in-class. Font: Inter, borderRadius: 12px. Industry: ${industry}. Return ONLY valid JSON with pages array, theme (primaryColor, secondaryColor), and components array.` },
         { role: "user", content: JSON.stringify(blueprint) },
       ],
+      8192,
+      0.3,
+      WEBSITE_TIMEOUT_MS,
     );
 
     return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
@@ -743,6 +755,9 @@ Return ONLY valid JSON with pages array, theme (primaryColor, secondaryColor), a
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify(blueprint) },
       ],
+      8192,
+      0.3,
+      WEBSITE_TIMEOUT_MS,
     );
 
     return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
@@ -852,6 +867,9 @@ Return ONLY valid JSON with pages array, theme (primaryColor, secondaryColor), a
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify(blueprint) },
       ],
+      8192,
+      0.3,
+      WEBSITE_TIMEOUT_MS,
     );
 
     return this.validateWebsiteSpec(raw) as unknown as WebsiteSpecResult;
