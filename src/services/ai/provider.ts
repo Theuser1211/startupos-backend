@@ -215,8 +215,7 @@ export abstract class BaseAIProvider implements AIProvider {
         if (response.status === 429) {
           const retryAfter = response.headers.get("retry-after");
           const delay = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
-          logger.warn({ provider: this.name, retryAfter: delay }, "[Blueprint] Rate limited, waiting");
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          logger.warn({ provider: this.name, retryAfter: delay, elapsedMs: Date.now() - 0 }, "[Blueprint] Rate limited — skipping this provider");
           throw new AIProviderError(this.name, 429, `Rate limited (retry after ${delay}ms)`);
         }
         const errorBody = await response.text();
