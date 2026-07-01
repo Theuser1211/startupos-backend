@@ -64,11 +64,10 @@ export async function generateBlueprintHandler(
     logger.info({ requestId, startupId }, "[Blueprint] Parse succeeded");
 
     logger.info({ requestId, startupId }, "[Blueprint] Persistence start");
-    const blueprint = await prisma.blueprint.create({
-      data: {
-        startupId,
-        content: blueprintContent as unknown as object,
-      },
+    const blueprint = await prisma.blueprint.upsert({
+      where: { startupId },
+      update: { content: blueprintContent as unknown as object },
+      create: { startupId, content: blueprintContent as unknown as object },
     });
     logger.info({ requestId, startupId, blueprintId: blueprint.id }, "[Blueprint] Persistence succeeded");
 
