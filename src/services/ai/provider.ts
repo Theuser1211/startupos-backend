@@ -243,7 +243,21 @@ Return ONLY valid JSON with this exact structure:
   "techStack": ["tech1", "tech2"],
   "monetization": "Monetization strategy",
   "competitorAnalysis": ["competitor1", "competitor2"],
-  "roadmap": ["milestone1", "milestone2"]
+  "roadmap": ["milestone1", "milestone2"],
+  "brand": {
+    "mission": "Core mission statement (1-2 sentences)",
+    "values": ["value1", "value2", "value3"],
+    "tone": ["professional", "innovative"],
+    "colors": [
+      { "name": "Primary", "hex": "#2563EB" },
+      { "name": "Secondary", "hex": "#7C3AED" },
+      { "name": "Accent", "hex": "#10B981" }
+    ],
+    "typography": {
+      "heading": "Inter",
+      "body": "Inter"
+    }
+  }
 }`;
 
     const raw = await this.callAPI(
@@ -443,7 +457,21 @@ Return ONLY valid JSON with this exact structure:
   "techStack": [...],
   "monetization": "...",
   "competitorAnalysis": [...],
-  "roadmap": [...]
+  "roadmap": [...],
+  "brand": {
+    "mission": "Mission statement (1-2 sentences)",
+    "values": ["value1", "value2", "value3"],
+    "tone": ["professional", "innovative"],
+    "colors": [
+      { "name": "Primary", "hex": "#2563EB" },
+      { "name": "Secondary", "hex": "#7C3AED" },
+      { "name": "Accent", "hex": "#10B981" }
+    ],
+    "typography": {
+      "heading": "Inter",
+      "body": "Inter"
+    }
+  }
 }`;
 
     const raw = await this.callAPI(
@@ -561,7 +589,21 @@ Return ONLY valid JSON with this exact structure:
   "techStack": [...],
   "monetization": "...",
   "competitorAnalysis": [...],
-  "roadmap": [...]
+  "roadmap": [...],
+  "brand": {
+    "mission": "Mission statement (1-2 sentences)",
+    "values": ["value1", "value2", "value3"],
+    "tone": ["professional", "innovative"],
+    "colors": [
+      { "name": "Primary", "hex": "#2563EB" },
+      { "name": "Secondary", "hex": "#7C3AED" },
+      { "name": "Accent", "hex": "#10B981" }
+    ],
+    "typography": {
+      "heading": "Inter",
+      "body": "Inter"
+    }
+  }
 }`;
 
     const raw = await this.callAPI(
@@ -645,7 +687,21 @@ Return ONLY valid JSON with this exact structure:
   "techStack": [...],
   "monetization": "...",
   "competitorAnalysis": [...],
-  "roadmap": [...]
+  "roadmap": [...],
+  "brand": {
+    "mission": "Mission statement (1-2 sentences)",
+    "values": ["value1", "value2", "value3"],
+    "tone": ["professional", "innovative"],
+    "colors": [
+      { "name": "Primary", "hex": "#2563EB" },
+      { "name": "Secondary", "hex": "#7C3AED" },
+      { "name": "Accent", "hex": "#10B981" }
+    ],
+    "typography": {
+      "heading": "Inter",
+      "body": "Inter"
+    }
+  }
 }`;
 
     const raw = await this.callAPI(
@@ -740,7 +796,21 @@ Return ONLY valid JSON with this exact structure:
   "techStack": [...],
   "monetization": "...",
   "competitorAnalysis": [...],
-  "roadmap": [...]
+  "roadmap": [...],
+  "brand": {
+    "mission": "Mission statement (1-2 sentences)",
+    "values": ["value1", "value2", "value3"],
+    "tone": ["professional", "innovative"],
+    "colors": [
+      { "name": "Primary", "hex": "#2563EB" },
+      { "name": "Secondary", "hex": "#7C3AED" },
+      { "name": "Accent", "hex": "#10B981" }
+    ],
+    "typography": {
+      "heading": "Inter",
+      "body": "Inter"
+    }
+  }
 }`;
 
     const raw = await this.callAPI(

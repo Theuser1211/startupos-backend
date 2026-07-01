@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+export const BrandIdentitySchema = z.object({
+  mission: z.string().min(1),
+  values: z.array(z.string().min(1)).min(2).max(8),
+  tone: z.array(z.string().min(1)).min(2).max(8),
+  colors: z.array(z.object({
+    name: z.string().min(1),
+    hex: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid hex color"),
+  })).min(3).max(6),
+  typography: z.object({
+    heading: z.string().min(1),
+    body: z.string().min(1),
+  }),
+});
+
 export const BlueprintResultSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
@@ -12,6 +26,7 @@ export const BlueprintResultSchema = z.object({
   monetization: z.string().min(1),
   competitorAnalysis: z.array(z.union([z.string(), z.object({ name: z.string().optional(), description: z.string().optional() })])).min(1),
   roadmap: z.array(z.union([z.string(), z.object({ name: z.string().optional(), description: z.string().optional() })])).min(1),
+  brand: BrandIdentitySchema.optional(),
 });
 
 function normalizeStringArray(arr: unknown[]): string[] {
