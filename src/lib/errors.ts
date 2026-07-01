@@ -49,6 +49,16 @@ export function handleError(reply: FastifyReply, error: unknown): void {
     return;
   }
 
+  const fastifyError = error as { statusCode?: number; validation?: unknown; name?: string };
+  if (fastifyError?.statusCode && fastifyError.statusCode >= 400 && fastifyError.statusCode < 500) {
+    reply.status(fastifyError.statusCode).send({
+      error: fastifyError.name || "ValidationError",
+      message: fastifyError.message || "Request failed validation",
+      details: fastifyError.validation || undefined,
+    });
+    return;
+  }
+
   reply.status(500).send({
     error: "InternalServerError",
     message:
